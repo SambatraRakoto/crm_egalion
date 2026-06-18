@@ -1,0 +1,276 @@
+'use strict';
+
+const shopifyRepo = require('../repositories/shopify.repository');
+const { createClient } = require('../utils/shopifyClient');
+const { mapFulfillment } = require('../utils/shopifyFulfillment');
+const { SYNC_STATUS } = require('../utils/constants');
+const ApiError = require('../utils/ApiError');
+const config = require('../config');
+const logger = require('../utils/logger');
+
+/** Resolve credentials: DB settings first, env as fallback. */
+// FR : Résout les identifiants Shopify (DB puis env).
+// EN : Resolve Shopify credentials (DB first, then env).
+async function resolveCredentials() {
+  const db = await shopifyRepo.getCredentials();
+  return {
+    storeDomain: (db && db.store_domain) || config.shopify.storeDomain,
+    accessToken: (db && db.access_token) || config.shopify.accessToken,
+    apiVersion: (db && db.api_version) || config.shopify.apiVersion,
+  };
+}
+
+// FR : Renvoie les paramètres Shopify (token jamais en clair).
+// EN : Return Shopify settings (token never in clear).
+async function getSettings() {
+  return shopifyRepo.getSettings();
+}
+
+// FR : Enregistre les paramètres Shopify.
+// EN : Persist Shopify settings.
+async function updateSettings(data) {
+  await shopifyRepo.upsertSettings(data);
+  return shopifyRepo.getSettings();
+}
+
+// FR : Teste la connexion à la boutique Shopify.
+// EN : Test the connection to the Shopify store.
+async function checkConnection() {
+  const creds = await resolveCredentials();
+  const client = createClient(creds);
+  try {
+    const { shop } = await client.getShop();
+    await shopifyRepo.setConnected(true);
+    return { connected: true, shop: { name: shop.name, domain: shop.domain, email: shop.email } };
+  } catch (err) {
+    await shopifyRepo.setConnected(false);
+    throw err;
+  }
+}
+
+// ---- Mappers from Shopify payloads to our schema ----
+// FR : Mappe un produit Shopify vers notre schéma.
+// EN : Map a Shopify product to our schema.
+function mapProduct(p) {
+  const variant = (p.variants && p.variants[0]) || {};
+  return {
+    shopifyProductId: p.id,
+    sku: variant.sku || null,
+    name: p.title,
+    description: p.body_html || null,
+    category: p.product_type || null,
+    price: variant.price ? Number(variant.price) : 0,
+    stockQuantity: variant.inventory_quantity != null ? variant.inventory_quantity : 0,
+    imageUrl: p.image ? p.image.src : null,
+    shopifyInventoryItemId: variant.inventory_item_id || null,
+  };
+}
+
+// FR : Mappe une commande Shopify vers notre schéma.
+// EN : Map a Shopify order to our schema.
+function mapOrder(o) {
+  const ship = o.shipping_address || o.billing_address || {};
+  const customer = o.customer || {};
+  return {
+    shopifyOrderId: o.id,
+    orderNumber: o.name || String(o.order_number || ''),
+    customerName: ship.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || null,
+    customerPhone: ship.phone || o.phone || customer.phone || null,
+    customerEmail: o.email || customer.email || null,
+    region: ship.province || null,
+    city: ship.city || null,
+    deliveryAddress: [ship.address1, ship.address2].filter(Boolean).join(', ') || null,
+    orderAmount: o.total_price ? Number(o.total_price) : 0,
+    paymentMethod: (o.payment_gateway_names && o.payment_gateway_names[0]) || o.financial_status || null,
+    orderedAt: o.created_at || null,
+    // A cancelled order carries cancelled_at; reflect it in the delivery status.
+    deliveryStatus: o.cancelled_at ? 'cancelled' : null,
+  };
+}
+
+// FR : Exécute une synchro générique (fetch → map → upsert) avec journal.
+// EN : Run a generic sync (fetch → map → upsert) with logging.
+async function runSync(syncType, fetcher, mapper, upsert) {
+  const log = await shopifyRepo.startLog(syncType);
+  let processed = 0;
+  try {
+    const creds = await resolveCredentials();
+    const client = createClient(creds);
+    const items = await fetcher(client);
+    for (const item of items) {
+      await upsert(mapper(item));
+      processed++;
+    }
+    await shopifyRepo.touchLastSynced();
+    return shopifyRepo.completeLog(log.id, { status: SYNC_STATUS.SUCCESS, recordsProcessed: processed });
+  } catch (err) {
+    logger.error(`Shopify ${syncType} sync failed`, err);
+    await shopifyRepo.completeLog(log.id, {
+      status: SYNC_STATUS.FAILED,
+      recordsProcessed: processed,
+      errorMessage: err.message,
+    });
+    throw err instanceof ApiError ? err : ApiError.internal(`Échec de la synchronisation ${syncType}: ${err.message}`);
+  }
+}
+
+// FR : Synchronise les produits depuis Shopify.
+// EN : Sync products from Shopify.
+async function syncProducts() {
+  return runSync(
+    'products',
+    async (c) => (await c.getProducts()).products || [],
+    mapProduct,
+    (p) => shopifyRepo.upsertProduct(p)
+  );
+}
+
+// FR : Synchronise les commandes depuis Shopify.
+// EN : Sync orders from Shopify.
+async function syncOrders() {
+  return runSync(
+    'orders',
+    async (c) => (await c.getOrders()).orders || [],
+    mapOrder,
+    (o) => shopifyRepo.upsertOrder(o)
+  );
+}
+
+/**
+ * Register the real-time webhooks in Shopify so events are pushed to this API.
+ * Idempotent: skips topics already pointing at our endpoints.
+ */
+// FR : Enregistre les webhooks temps réel chez Shopify (idempotent).
+// EN : Register the real-time webhooks in Shopify (idempotent).
+async function registerWebhooks() {
+  if (!config.publicUrl) {
+    throw ApiError.badRequest('APP_PUBLIC_URL non configuré: impossible d\'enregistrer les webhooks Shopify');
+  }
+  const base = `${config.publicUrl}${config.apiPrefix}/shopify/webhooks`;
+  const topics = [
+    { topic: 'orders/create', address: `${base}/orders` },
+    { topic: 'orders/updated', address: `${base}/orders` },
+    { topic: 'orders/cancelled', address: `${base}/orders/cancelled` },
+    { topic: 'fulfillments/create', address: `${base}/fulfillments` },
+    { topic: 'fulfillments/update', address: `${base}/fulfillments` },
+    { topic: 'products/create', address: `${base}/products` },
+    { topic: 'products/update', address: `${base}/products` },
+    { topic: 'inventory_levels/update', address: `${base}/inventory` },
+  ];
+
+  const creds = await resolveCredentials();
+  const client = createClient(creds);
+  const existing = ((await client.listWebhooks()).webhooks || []).map((w) => `${w.topic}|${w.address}`);
+
+  const results = [];
+  for (const t of topics) {
+    if (existing.includes(`${t.topic}|${t.address}`)) {
+      results.push({ ...t, status: 'already_registered' });
+      continue;
+    }
+    await client.createWebhook(t.topic, t.address);
+    results.push({ ...t, status: 'created' });
+  }
+  logger.info(`Shopify webhooks registered: ${results.map((r) => `${r.topic}=${r.status}`).join(', ')}`);
+  return results;
+}
+
+// ---- Real-time webhooks (pushed by Shopify on each event) ----
+
+/** Upsert a single order received from a Shopify orders/create|updated webhook. */
+// FR : Traite un webhook commande create/updated (upsert).
+// EN : Handle an order create/updated webhook (upsert).
+async function handleOrderWebhook(payload) {
+  if (!payload || !payload.id) throw ApiError.badRequest('Payload commande Shopify invalide');
+  const mapped = mapOrder(payload);
+  await shopifyRepo.upsertOrder(mapped);
+  await shopifyRepo.touchLastSynced();
+  logger.info(`Shopify webhook: order ${mapped.shopifyOrderId} (${mapped.orderNumber}) upserted`);
+  return { shopifyOrderId: mapped.shopifyOrderId, orderedAt: mapped.orderedAt };
+}
+
+/** Upsert a single product received from a Shopify products/create|update webhook. */
+// FR : Traite un webhook produit create/update (upsert).
+// EN : Handle a product create/update webhook (upsert).
+async function handleProductWebhook(payload) {
+  if (!payload || !payload.id) throw ApiError.badRequest('Payload produit Shopify invalide');
+  const mapped = mapProduct(payload);
+  await shopifyRepo.upsertProduct(mapped);
+  await shopifyRepo.touchLastSynced();
+  logger.info(`Shopify webhook: product ${mapped.shopifyProductId} (${mapped.name}) upserted`);
+  return { shopifyProductId: mapped.shopifyProductId };
+}
+
+/**
+ * orders/cancelled webhook. Upsert the order, then force its delivery status to
+ * 'cancelled' (overrides ShaQ/fulfillment status, since the source order is gone).
+ */
+// FR : Traite un webhook commande annulée (statut cancelled).
+// EN : Handle an order-cancelled webhook (status cancelled).
+async function handleOrderCancelled(payload) {
+  if (!payload || !payload.id) throw ApiError.badRequest('Payload commande Shopify invalide');
+  const mapped = mapOrder(payload);
+  await shopifyRepo.upsertOrder(mapped);
+  await shopifyRepo.setOrderDeliveryByShopifyId(mapped.shopifyOrderId, { status: 'cancelled' });
+  logger.info(`Shopify webhook: order ${mapped.shopifyOrderId} cancelled`);
+  return { shopifyOrderId: mapped.shopifyOrderId, deliveryStatus: 'cancelled' };
+}
+
+/**
+ * fulfillments/create|update webhook. Map the carrier shipment status to our
+ * delivery status and update the matching order (plus tracking number).
+ */
+// FR : Traite un webhook fulfillment (statut + tracking).
+// EN : Handle a fulfillment webhook (status + tracking).
+async function handleFulfillmentWebhook(payload) {
+  const shopifyOrderId = payload && (payload.order_id || (payload.fulfillment && payload.fulfillment.order_id));
+  if (!shopifyOrderId) throw ApiError.badRequest('order_id manquant dans le payload fulfillment');
+
+  const f = payload.fulfillment || payload;
+  const status = mapFulfillment({ shipmentStatus: f.shipment_status, status: f.status });
+  const trackingId = f.tracking_number || (Array.isArray(f.tracking_numbers) ? f.tracking_numbers[0] : null);
+
+  const affected = await shopifyRepo.setOrderDeliveryByShopifyId(shopifyOrderId, { status, trackingId });
+  logger.info(`Shopify webhook: fulfillment for order ${shopifyOrderId} -> ${status || 'no-map'} (${affected} maj)`);
+  return { shopifyOrderId, mappedStatus: status, trackingId, orderUpdated: affected > 0 };
+}
+
+/**
+ * inventory_levels/update webhook. Update product stock by inventory_item_id.
+ * Requires the product to have been synced first (so the item id is known).
+ */
+// FR : Traite un webhook stock (maj par inventory_item_id).
+// EN : Handle an inventory webhook (update by inventory_item_id).
+async function handleInventoryWebhook(payload) {
+  const inventoryItemId = payload && payload.inventory_item_id;
+  const available = payload && payload.available;
+  if (!inventoryItemId) throw ApiError.badRequest('inventory_item_id manquant');
+
+  const affected = await shopifyRepo.setStockByInventoryItem(inventoryItemId, Number(available) || 0);
+  if (!affected) logger.warn(`Shopify webhook: no product for inventory_item_id ${inventoryItemId}`);
+  return { inventoryItemId, available: Number(available) || 0, productUpdated: affected > 0 };
+}
+
+// FR : Historique paginé des synchronisations.
+// EN : Paginated sync history.
+async function history(query) {
+  const { parsePagination } = require('../utils/queryParams');
+  const { page, limit, offset } = parsePagination(query);
+  const { total, rows } = await shopifyRepo.listLogs({ limit, offset, syncType: query.type });
+  return { rows, page, limit, total };
+}
+
+module.exports = {
+  getSettings,
+  updateSettings,
+  checkConnection,
+  syncProducts,
+  syncOrders,
+  handleOrderWebhook,
+  handleOrderCancelled,
+  handleFulfillmentWebhook,
+  handleInventoryWebhook,
+  handleProductWebhook,
+  registerWebhooks,
+  history,
+};

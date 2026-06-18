@@ -1,0 +1,208 @@
+{
+  "info": {
+    "name": "Nuruya CRM API",
+    "description": "Collection complète de l'API CRM Nuruya (Node/Express/PostgreSQL). Définir les variables {{baseUrl}}, {{accessToken}}, {{refreshToken}}. Le login enregistre automatiquement les tokens.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api/v1" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "orderId", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "userId", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data) {",
+                  "  pm.collectionVariables.set('accessToken', res.data.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.data.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@nuruya.com\",\n  \"password\": \"Admin@123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Me",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] } }
+        },
+        {
+          "name": "Register (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"Agent Test\",\n  \"email\": \"agent@nuruya.com\",\n  \"password\": \"Agent@123\",\n  \"roles\": [\"agent\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] }
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"Admin@123\",\n  \"newPassword\": \"Admin@1234\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth", "change-password"] }
+          }
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@nuruya.com\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["auth", "forgot-password"] }
+          }
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"token\": \"<token>\",\n  \"newPassword\": \"NewPass@123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/reset-password", "host": ["{{baseUrl}}"], "path": ["auth", "reset-password"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        { "name": "List roles", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/roles", "host": ["{{baseUrl}}"], "path": ["users", "roles"] } } },
+        { "name": "List", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users?page=1&limit=20&search=", "host": ["{{baseUrl}}"], "path": ["users"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }, { "key": "search", "value": "" }] } } },
+        { "name": "Get one", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } } },
+        { "name": "Update", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"Nom Modifié\",\n  \"phone\": \"+233200000000\"\n}" }, "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } } },
+        { "name": "Set roles", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"roles\": [\"manager\", \"finance\"]\n}" }, "url": { "raw": "{{baseUrl}}/users/{{userId}}/roles", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "roles"] } } },
+        { "name": "Activate / Deactivate", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"isActive\": false\n}" }, "url": { "raw": "{{baseUrl}}/users/{{userId}}/active", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "active"] } } },
+        { "name": "Delete", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } } }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/products?page=1&limit=20&stockState=low_stock", "host": ["{{baseUrl}}"], "path": ["products"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }, { "key": "stockState", "value": "low_stock" }] } } },
+        { "name": "Get one", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}"] } } },
+        { "name": "Create", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Nouveau produit\",\n  \"sku\": \"NRY-100\",\n  \"category\": \"Beauté\",\n  \"price\": 99.9,\n  \"supplierCost\": 40,\n  \"stockQuantity\": 50,\n  \"lowStockThreshold\": 10\n}" }, "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] } } },
+        { "name": "Update", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"price\": 109.9\n}" }, "url": { "raw": "{{baseUrl}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}"] } } },
+        { "name": "Update stock (delta)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"delta\": -3\n}" }, "url": { "raw": "{{baseUrl}}/products/{{productId}}/stock", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}", "stock"] } } },
+        { "name": "Delete", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}"] } } }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        { "name": "List (period filter)", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/orders?period=month&status=pending&page=1&limit=20&sortBy=created_at&sortDir=desc", "host": ["{{baseUrl}}"], "path": ["orders"], "query": [{ "key": "period", "value": "month" }, { "key": "status", "value": "pending" }, { "key": "page", "value": "1" }, { "key": "limit", "value": "20" }, { "key": "sortBy", "value": "created_at" }, { "key": "sortDir", "value": "desc" }] } } },
+        { "name": "Get one", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}"] } } },
+        { "name": "Create", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"customerName\": \"Kwame A.\",\n  \"customerPhone\": \"+233200000000\",\n  \"region\": \"Greater Accra\",\n  \"city\": \"Accra\",\n  \"deliveryAddress\": \"123 Main St\",\n  \"orderAmount\": 250,\n  \"deliveryCost\": 20,\n  \"shaqCost\": 15,\n  \"paymentMethod\": \"cod\",\n  \"deliveryStatus\": \"pending\",\n  \"items\": [{ \"productName\": \"Crème hydratante\", \"sku\": \"NRY-001\", \"quantity\": 2, \"unitPrice\": 120 }]\n}" }, "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] } } },
+        { "name": "Update", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"deliveryStatus\": \"delivered\"\n}" }, "url": { "raw": "{{baseUrl}}/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}"] } } },
+        { "name": "Archive", "request": { "method": "PATCH", "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/archive", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "archive"] } } },
+        { "name": "Restore", "request": { "method": "PATCH", "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/restore", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "restore"] } } },
+        { "name": "Bulk status", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"ids\": [\"{{orderId}}\"],\n  \"status\": \"transit\"\n}" }, "url": { "raw": "{{baseUrl}}/orders/bulk/status", "host": ["{{baseUrl}}"], "path": ["orders", "bulk", "status"] } } },
+        { "name": "Bulk archive", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"ids\": [\"{{orderId}}\"],\n  \"archived\": true\n}" }, "url": { "raw": "{{baseUrl}}/orders/bulk/archive", "host": ["{{baseUrl}}"], "path": ["orders", "bulk", "archive"] } } },
+        { "name": "Bulk notes", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"ids\": [\"{{orderId}}\"],\n  \"notes\": \"Appeler le client\"\n}" }, "url": { "raw": "{{baseUrl}}/orders/bulk/notes", "host": ["{{baseUrl}}"], "path": ["orders", "bulk", "notes"] } } },
+        { "name": "Delete", "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}"] } } }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        { "name": "Overview", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/overview?period=month", "host": ["{{baseUrl}}"], "path": ["dashboard", "overview"], "query": [{ "key": "period", "value": "month" }] } } },
+        { "name": "KPIs", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/kpis?period=year", "host": ["{{baseUrl}}"], "path": ["dashboard", "kpis"], "query": [{ "key": "period", "value": "year" }] } } },
+        { "name": "Revenue series", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/revenue-series?period=year&granularity=month", "host": ["{{baseUrl}}"], "path": ["dashboard", "revenue-series"], "query": [{ "key": "period", "value": "year" }, { "key": "granularity", "value": "month" }] } } },
+        { "name": "Status distribution", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/status-distribution?period=month", "host": ["{{baseUrl}}"], "path": ["dashboard", "status-distribution"] } } },
+        { "name": "Order volume", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/order-volume?period=month", "host": ["{{baseUrl}}"], "path": ["dashboard", "order-volume"] } } },
+        { "name": "Delivery funnel", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/delivery-funnel?period=month", "host": ["{{baseUrl}}"], "path": ["dashboard", "delivery-funnel"] } } },
+        { "name": "Top products", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/top-products?period=month&limit=10", "host": ["{{baseUrl}}"], "path": ["dashboard", "top-products"] } } },
+        { "name": "Top regions", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/top-regions?period=month&limit=10", "host": ["{{baseUrl}}"], "path": ["dashboard", "top-regions"] } } },
+        { "name": "Cancellation by region", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/dashboard/cancellation-by-region?period=month", "host": ["{{baseUrl}}"], "path": ["dashboard", "cancellation-by-region"] } } }
+      ]
+    },
+    {
+      "name": "Finance",
+      "item": [
+        { "name": "Summary", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/finance/summary?period=month", "host": ["{{baseUrl}}"], "path": ["finance", "summary"] } } },
+        { "name": "Report", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/finance/report?period=year&granularity=month", "host": ["{{baseUrl}}"], "path": ["finance", "report"] } } }
+      ]
+    },
+    {
+      "name": "Shopify",
+      "item": [
+        { "name": "Get settings", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/shopify/settings", "host": ["{{baseUrl}}"], "path": ["shopify", "settings"] } } },
+        { "name": "Update settings", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"storeDomain\": \"ma-boutique.myshopify.com\",\n  \"accessToken\": \"shpat_xxx\",\n  \"apiVersion\": \"2024-10\"\n}" }, "url": { "raw": "{{baseUrl}}/shopify/settings", "host": ["{{baseUrl}}"], "path": ["shopify", "settings"] } } },
+        { "name": "Check connection", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/shopify/check-connection", "host": ["{{baseUrl}}"], "path": ["shopify", "check-connection"] } } },
+        { "name": "Sync products", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/shopify/sync/products", "host": ["{{baseUrl}}"], "path": ["shopify", "sync", "products"] } } },
+        { "name": "Sync orders", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/shopify/sync/orders", "host": ["{{baseUrl}}"], "path": ["shopify", "sync", "orders"] } } },
+        { "name": "Sync history", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/shopify/sync/history", "host": ["{{baseUrl}}"], "path": ["shopify", "sync", "history"] } } },
+        { "name": "Register webhooks", "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/shopify/webhooks/register", "host": ["{{baseUrl}}"], "path": ["shopify", "webhooks", "register"] } } },
+        { "name": "Webhook orders (real-time)", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-Shopify-Hmac-Sha256", "value": "<base64-hmac>" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 450789469,\n  \"name\": \"#1001\",\n  \"email\": \"client@example.com\",\n  \"total_price\": \"199.00\",\n  \"created_at\": \"2024-01-15T10:30:00-05:00\",\n  \"shipping_address\": { \"name\": \"Kwame\", \"phone\": \"+233200000000\", \"province\": \"Greater Accra\", \"city\": \"Accra\", \"address1\": \"123 Rue\" }\n}" }, "url": { "raw": "{{baseUrl}}/shopify/webhooks/orders", "host": ["{{baseUrl}}"], "path": ["shopify", "webhooks", "orders"] } } },
+        { "name": "Webhook products (real-time)", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-Shopify-Hmac-Sha256", "value": "<base64-hmac>" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 632910392,\n  \"title\": \"Crème hydratante\",\n  \"product_type\": \"Beauté\",\n  \"variants\": [{ \"sku\": \"NRY-001\", \"price\": \"120.00\", \"inventory_quantity\": 40, \"inventory_item_id\": 808950810 }]\n}" }, "url": { "raw": "{{baseUrl}}/shopify/webhooks/products", "host": ["{{baseUrl}}"], "path": ["shopify", "webhooks", "products"] } } },
+        { "name": "Webhook order cancelled", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-Shopify-Hmac-Sha256", "value": "<base64-hmac>" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 450789469,\n  \"name\": \"#1001\",\n  \"cancelled_at\": \"2024-01-16T09:00:00-05:00\",\n  \"created_at\": \"2024-01-15T10:30:00-05:00\",\n  \"total_price\": \"199.00\"\n}" }, "url": { "raw": "{{baseUrl}}/shopify/webhooks/orders/cancelled", "host": ["{{baseUrl}}"], "path": ["shopify", "webhooks", "orders", "cancelled"] } } },
+        { "name": "Webhook fulfillment", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-Shopify-Hmac-Sha256", "value": "<base64-hmac>" }], "body": { "mode": "raw", "raw": "{\n  \"order_id\": 450789469,\n  \"status\": \"success\",\n  \"shipment_status\": \"in_transit\",\n  \"tracking_number\": \"SHAQ123\"\n}" }, "url": { "raw": "{{baseUrl}}/shopify/webhooks/fulfillments", "host": ["{{baseUrl}}"], "path": ["shopify", "webhooks", "fulfillments"] } } },
+        { "name": "Webhook inventory", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "X-Shopify-Hmac-Sha256", "value": "<base64-hmac>" }], "body": { "mode": "raw", "raw": "{\n  \"inventory_item_id\": 808950810,\n  \"location_id\": 905684977,\n  \"available\": 25\n}" }, "url": { "raw": "{{baseUrl}}/shopify/webhooks/inventory", "host": ["{{baseUrl}}"], "path": ["shopify", "webhooks", "inventory"] } } }
+      ]
+    },
+    {
+      "name": "ShaQ",
+      "item": [
+        { "name": "Webhook (delivery update)", "request": { "method": "POST", "auth": { "type": "noauth" }, "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "x-shaq-signature", "value": "<hmac>" }], "body": { "mode": "raw", "raw": "{\n  \"tracking_id\": \"SHAQ123\",\n  \"status\": \"in_transit\",\n  \"description\": \"Colis en route\",\n  \"timestamp\": \"2026-06-14T10:00:00Z\"\n}" }, "url": { "raw": "{{baseUrl}}/shaq/webhook", "host": ["{{baseUrl}}"], "path": ["shaq", "webhook"] } } },
+        { "name": "List events", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/shaq/events?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["shaq", "events"] } } },
+        { "name": "Events for order", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/shaq/orders/{{orderId}}/events", "host": ["{{baseUrl}}"], "path": ["shaq", "orders", "{{orderId}}", "events"] } } }
+      ]
+    },
+    {
+      "name": "Audit logs",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/audit-logs?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["audit-logs"] } } }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        { "name": "Health", "request": { "method": "GET", "auth": { "type": "noauth" }, "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] } } }
+      ]
+    }
+  ]
+}

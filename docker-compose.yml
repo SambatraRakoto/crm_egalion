@@ -1,0 +1,93 @@
+# ─── Nuruya CRM — Portainer Stack ─────────────────────────────────────────────
+# Deploy via Portainer: Stacks → Add stack → "Repository" (build from Git) or
+# "Web editor" (paste this file). Define the variables below in the Portainer
+# "Environment variables" section.
+#
+# Services:
+#   db   — PostgreSQL 16 (persistent volume)
+#   api  — Node/Express backend (runs migrations on start, listens on :4000)
+#   web  — Nginx serving the built frontend + proxying /api → api:4000 (port 80)
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-nuruya_crm}
+      POSTGRES_USER: ${PGUSER:-nuruya_app}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-nuruya_app} -d ${PGDATABASE:-nuruya_crm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nuruya
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      API_PREFIX: /api/v1
+      APP_TIMEZONE: Africa/Accra
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${PGDATABASE:-nuruya_crm}
+      PGUSER: ${PGUSER:-nuruya_app}
+      PGPASSWORD: ${PGPASSWORD}
+      PGSSL: "false"
+      PG_POOL_MAX: "10"
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_EXPIRES: 15m
+      JWT_REFRESH_EXPIRES: 7d
+      BCRYPT_ROUNDS: "12"
+      CORS_ORIGIN: ${APP_PUBLIC_URL}
+      RATE_LIMIT_WINDOW_MS: "900000"
+      RATE_LIMIT_MAX: "300"
+      AUTH_RATE_LIMIT_MAX: "20"
+      # Shopify (optional)
+      SHOPIFY_STORE_DOMAIN: ${SHOPIFY_STORE_DOMAIN:-}
+      SHOPIFY_ACCESS_TOKEN: ${SHOPIFY_ACCESS_TOKEN:-}
+      SHOPIFY_API_VERSION: ${SHOPIFY_API_VERSION:-2024-10}
+      SHOPIFY_WEBHOOK_SECRET: ${SHOPIFY_WEBHOOK_SECRET:-}
+      # ShaQ (optional)
+      SHAQ_API_BASE: ${SHAQ_API_BASE:-https://public-api.shaqexpress.com}
+      SHAQ_IDENTIFIER: ${SHAQ_IDENTIFIER:-}
+      SHAQ_SECRET: ${SHAQ_SECRET:-}
+      SHAQ_WEBHOOK_SECRET: ${SHAQ_WEBHOOK_SECRET:-}
+    networks:
+      - nuruya
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # "/" → API called on the same origin (relative). Nginx proxies /api to
+        # the backend, so this works on ANY domain without a rebuild.
+        VITE_API_URL: "/"
+        VITE_API_PREFIX: /api/v1
+        VITE_USE_MOCK: "false"
+        VITE_USD_TO_GHS: ${VITE_USD_TO_GHS:-15.4}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    networks:
+      - nuruya
+
+volumes:
+  db_data:
+
+networks:
+  nuruya:
