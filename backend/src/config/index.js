@@ -80,6 +80,8 @@ const config = {
     // Sender (origin) defaults used when creating packages.
     sourceCountryIso2: process.env.SHAQ_SOURCE_COUNTRY || 'GH',
     sourceAddress: process.env.SHAQ_SOURCE_ADDRESS || 'Accra, Ghana',
+    // Destination country (domestic Ghana delivery by default). Required by ShaQ.
+    destCountryIso2: process.env.SHAQ_DEST_COUNTRY || 'GH',
     // Prefix for our order references == ShaQ partner_ref (dedup key).
     orderRefPrefix: process.env.SHAQ_ORDER_PREFIX || '#NA-',
     // Auto-ship: every Shopify order received is sent to ShaQ automatically.

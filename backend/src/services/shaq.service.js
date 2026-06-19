@@ -139,6 +139,7 @@ async function sendOrderToShaq(orderId) {
     customer_phone_1: order.customer_phone || '',
     source_country_iso2: config.shaq.sourceCountryIso2,
     source_address_line_1: config.shaq.sourceAddress,
+    destination_country_iso2: config.shaq.destCountryIso2,
     destination_region: order.region || '',
     destination_city: order.city || '',
     destination_address_line_1: order.delivery_address || order.city || order.region || partnerRef,
