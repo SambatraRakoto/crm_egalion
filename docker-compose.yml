@@ -81,36 +81,15 @@ services:
     restart: unless-stopped
     depends_on:
       - api
-    # No host port: Caddy (below) fronts it and terminates HTTPS.
-    expose:
-      - "80"
-    networks:
-      - nuruya
-
-  # ─── Caddy reverse proxy — automatic HTTPS (Let's Encrypt) ───────────────────
-  # Needs ports 80 + 443 open (Hostinger firewall + ufw) and a DNS A record
-  # SITE_DOMAIN -> VPS IP. Caddy obtains/renews the certificate automatically.
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    depends_on:
-      - web
+    # Published on the host so the host-level Nginx (reverse proxy + HTTPS)
+    # can forward traffic to it: proxy_pass http://127.0.0.1:8080;
     ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      SITE_DOMAIN: ${SITE_DOMAIN}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - "${WEB_PORT:-8080}:80"
     networks:
       - nuruya
 
 volumes:
   db_data:
-  caddy_data:
-  caddy_config:
 
 networks:
   nuruya:
