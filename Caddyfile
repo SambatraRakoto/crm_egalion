@@ -1,0 +1,10 @@
+# Caddy reverse proxy — automatic HTTPS (Let's Encrypt).
+# {$SITE_DOMAIN} is injected from the SITE_DOMAIN env var (e.g. crm.nuruya.com).
+# Caddy obtains + renews the TLS certificate automatically and proxies all
+# traffic to the frontend container (web:80), which already proxies /api to the
+# backend. So this terminates HTTPS for the whole app.
+
+{$SITE_DOMAIN} {
+	encode gzip
+	reverse_proxy web:80
+}

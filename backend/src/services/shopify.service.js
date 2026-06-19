@@ -4,9 +4,36 @@ const shopifyRepo = require('../repositories/shopify.repository');
 const { createClient } = require('../utils/shopifyClient');
 const { mapFulfillment } = require('../utils/shopifyFulfillment');
 const { SYNC_STATUS } = require('../utils/constants');
+const { deliveryFee } = require('../utils/shaqTariff');
 const ApiError = require('../utils/ApiError');
 const config = require('../config');
 const logger = require('../utils/logger');
+
+// FR : Convertit du HTML (body_html Shopify) en texte brut lisible.
+// EN : Convert HTML (Shopify body_html) into readable plain text.
+function stripHtml(html) {
+  if (!html) return null;
+  const text = String(html)
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, '\n')
+    .replace(/<(br|hr)\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    // Numeric HTML entities (e.g. &#9989; → ✅, &#x2705; → ✅).
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(parseInt(n, 10)))
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || null;
+}
 
 /** Resolve credentials: DB settings first, env as fallback. */
 // FR : Résout les identifiants Shopify (DB puis env).
@@ -57,7 +84,7 @@ function mapProduct(p) {
     shopifyProductId: p.id,
     sku: variant.sku || null,
     name: p.title,
-    description: p.body_html || null,
+    description: stripHtml(p.body_html),
     category: p.product_type || null,
     price: variant.price ? Number(variant.price) : 0,
     stockQuantity: variant.inventory_quantity != null ? variant.inventory_quantity : 0,
@@ -71,16 +98,39 @@ function mapProduct(p) {
 function mapOrder(o) {
   const ship = o.shipping_address || o.billing_address || {};
   const customer = o.customer || {};
+  const region = ship.province || null;
+
+  // FR : Lignes de commande (produit, quantité, prix unitaire).
+  // EN : Order line items (product, quantity, unit price).
+  const items = (o.line_items || []).map((li) => ({
+    shopifyProductId: li.product_id || null,
+    productName: li.title || li.name || null,
+    sku: li.sku || null,
+    quantity: li.quantity != null ? Number(li.quantity) : 1,
+    unitPrice: li.price != null ? Number(li.price) : 0,
+  }));
+
+  // FR : Frais de livraison : expédition Shopify si payée, sinon grille ShaQ par région.
+  // EN : Delivery fee: Shopify shipping if charged, else ShaQ regional tariff.
+  const shopifyShipping = Number(
+    (o.total_shipping_price_set && o.total_shipping_price_set.shop_money
+      && o.total_shipping_price_set.shop_money.amount)
+    ?? (o.shipping_lines || []).reduce((s, l) => s + Number(l.price || 0), 0)
+  ) || 0;
+  const deliveryCost = shopifyShipping > 0 ? shopifyShipping : deliveryFee(region);
+
   return {
     shopifyOrderId: o.id,
     orderNumber: o.name || String(o.order_number || ''),
     customerName: ship.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || null,
     customerPhone: ship.phone || o.phone || customer.phone || null,
     customerEmail: o.email || customer.email || null,
-    region: ship.province || null,
+    region,
     city: ship.city || null,
     deliveryAddress: [ship.address1, ship.address2].filter(Boolean).join(', ') || null,
     orderAmount: o.total_price ? Number(o.total_price) : 0,
+    deliveryCost,
+    items,
     paymentMethod: (o.payment_gateway_names && o.payment_gateway_names[0]) || o.financial_status || null,
     orderedAt: o.created_at || null,
     // A cancelled order carries cancelled_at; reflect it in the delivery status.

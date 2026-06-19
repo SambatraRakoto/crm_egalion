@@ -1,6 +1,6 @@
 'use strict';
 
-const { query } = require('../database/pool');
+const { query, transaction } = require('../database/pool');
 
 // ---- Settings (singleton row id = 1) ----
 // FR : Renvoie le singleton de paramètres (sans token).
@@ -146,20 +146,42 @@ async function upsertOrder(o) {
   // created_at (in Ghana time, thanks to the per-connection timezone), so the
   // CRM date is identical to Shopify's and analytics buckets stay accurate.
   // On conflict we preserve the original created_at/ordered_at.
-  await query(
-    `INSERT INTO orders (shopify_order_id, order_number, customer_name, customer_phone, customer_email,
-       region, city, delivery_address, order_amount, payment_method, delivery_status, ordered_at, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11,'pending'),
-             COALESCE($12::timestamptz, now()), COALESCE($12::timestamptz, now()))
-     ON CONFLICT (shopify_order_id) DO UPDATE SET
-       order_number = EXCLUDED.order_number, customer_name = EXCLUDED.customer_name,
-       customer_phone = EXCLUDED.customer_phone, customer_email = EXCLUDED.customer_email,
-       region = EXCLUDED.region, city = EXCLUDED.city, delivery_address = EXCLUDED.delivery_address,
-       order_amount = EXCLUDED.order_amount, payment_method = EXCLUDED.payment_method`,
-    [o.shopifyOrderId, o.orderNumber, o.customerName, o.customerPhone, o.customerEmail,
-     o.region, o.city, o.deliveryAddress, o.orderAmount, o.paymentMethod, o.deliveryStatus || null,
-     o.orderedAt || null]
-  );
+  // Order + its line items are written atomically in a single transaction.
+  await transaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO orders (shopify_order_id, order_number, customer_name, customer_phone, customer_email,
+         region, city, delivery_address, order_amount, delivery_cost, payment_method, delivery_status,
+         ordered_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE($12,'pending'),
+               COALESCE($13::timestamptz, now()), COALESCE($13::timestamptz, now()))
+       ON CONFLICT (shopify_order_id) DO UPDATE SET
+         order_number = EXCLUDED.order_number, customer_name = EXCLUDED.customer_name,
+         customer_phone = EXCLUDED.customer_phone, customer_email = EXCLUDED.customer_email,
+         region = EXCLUDED.region, city = EXCLUDED.city, delivery_address = EXCLUDED.delivery_address,
+         order_amount = EXCLUDED.order_amount, delivery_cost = EXCLUDED.delivery_cost,
+         payment_method = EXCLUDED.payment_method
+       RETURNING id`,
+      [o.shopifyOrderId, o.orderNumber, o.customerName, o.customerPhone, o.customerEmail,
+       o.region, o.city, o.deliveryAddress, o.orderAmount, o.deliveryCost ?? 0, o.paymentMethod,
+       o.deliveryStatus || null, o.orderedAt || null]
+    );
+    const orderId = rows[0].id;
+
+    // Replace the line items (idempotent re-sync): drop and re-insert.
+    if (Array.isArray(o.items)) {
+      await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
+      for (const it of o.items) {
+        await client.query(
+          `INSERT INTO order_items (order_id, product_id, product_name, sku, quantity, unit_price)
+           VALUES ($1,
+                   (SELECT id FROM products WHERE shopify_product_id = $2),
+                   $3, $4, $5, $6)`,
+          [orderId, it.shopifyProductId || null, it.productName || null, it.sku || null,
+           it.quantity ?? 1, it.unitPrice ?? 0]
+        );
+      }
+    }
+  });
 }
 
 module.exports = {

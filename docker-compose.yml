@@ -61,7 +61,7 @@ services:
       SHOPIFY_API_VERSION: ${SHOPIFY_API_VERSION:-2024-10}
       SHOPIFY_WEBHOOK_SECRET: ${SHOPIFY_WEBHOOK_SECRET:-}
       # ShaQ (optional)
-      SHAQ_API_BASE: ${SHAQ_API_BASE:-https://public-api.shaqexpress.com}
+      SHAQ_API_BASE: ${SHAQ_API_BASE:-https://test-partner.shaqexpress.com/api/v1}
       SHAQ_IDENTIFIER: ${SHAQ_IDENTIFIER:-}
       SHAQ_SECRET: ${SHAQ_SECRET:-}
       SHAQ_WEBHOOK_SECRET: ${SHAQ_WEBHOOK_SECRET:-}
@@ -81,13 +81,36 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    # No host port: Caddy (below) fronts it and terminates HTTPS.
+    expose:
+      - "80"
+    networks:
+      - nuruya
+
+  # ─── Caddy reverse proxy — automatic HTTPS (Let's Encrypt) ───────────────────
+  # Needs ports 80 + 443 open (Hostinger firewall + ufw) and a DNS A record
+  # SITE_DOMAIN -> VPS IP. Caddy obtains/renews the certificate automatically.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     networks:
       - nuruya
 
 volumes:
   db_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   nuruya:

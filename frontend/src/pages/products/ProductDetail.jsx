@@ -101,7 +101,7 @@ export default function ProductDetail({ product, currency, onBack }) {
               </div>
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${STATUS_BADGE[product.status]}`}>{product.status}</span>
             </div>
-            <p className="text-slate-500 text-sm leading-relaxed mb-4">{product.description}</p>
+            <p className="text-slate-500 text-sm leading-relaxed mb-4 whitespace-pre-line">{product.description}</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { icon: Tag, label: "Price", value: `${sym}${product[priceKey].toLocaleString()}` },
