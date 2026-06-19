@@ -45,5 +45,7 @@ router.post(
 router.post('/import', authenticate, canManage, ctrl.importPackages);
 // (3) Poll ShaQ and update CRM statuses on change.
 router.post('/sync-statuses', authenticate, canManage, ctrl.syncStatuses);
+// (4) Catch-up: ship every Pending order not yet sent to ShaQ.
+router.post('/ship-pending', authenticate, canManage, ctrl.shipPending);
 
 module.exports = router;

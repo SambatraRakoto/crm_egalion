@@ -72,4 +72,13 @@ const syncStatuses = asyncHandler(async (req, res) => {
   return success(res, { message: 'Statuts ShaQ synchronisés', data: result });
 });
 
-module.exports = { webhook, listEvents, eventsForOrder, getTariff, shipOrder, importPackages, syncStatuses };
+// (4) Catch-up: ship every Pending order not yet sent to ShaQ.
+// FR : POST /shaq/ship-pending — rattrapage des commandes Pending.
+// EN : POST /shaq/ship-pending — catch up Pending orders.
+const shipPending = asyncHandler(async (req, res) => {
+  const result = await shaqService.shipPendingOrders({ limit: Number(req.body?.limit) || 200 });
+  await auditService.record(req, { action: AUDIT_ACTION.SYNC_RUN, entityType: 'shaq', metadata: { action: 'ship_pending', ...result } });
+  return success(res, { message: 'Rattrapage ShaQ terminé', data: result });
+});
+
+module.exports = { webhook, listEvents, eventsForOrder, getTariff, shipOrder, importPackages, syncStatuses, shipPending };

@@ -147,7 +147,8 @@ async function upsertOrder(o) {
   // CRM date is identical to Shopify's and analytics buckets stay accurate.
   // On conflict we preserve the original created_at/ordered_at.
   // Order + its line items are written atomically in a single transaction.
-  await transaction(async (client) => {
+  // Returns the order id (used by the webhook to auto-ship to ShaQ).
+  return transaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO orders (shopify_order_id, order_number, customer_name, customer_phone, customer_email,
          region, city, delivery_address, order_amount, delivery_cost, payment_method, delivery_status,
@@ -181,6 +182,7 @@ async function upsertOrder(o) {
         );
       }
     }
+    return orderId;
   });
 }
 

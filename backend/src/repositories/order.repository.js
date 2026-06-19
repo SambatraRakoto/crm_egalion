@@ -57,6 +57,21 @@ async function listTracked(limit = 1000) {
   return rows;
 }
 
+// FR : Commandes non encore expédiées vers ShaQ (pour le rattrapage auto).
+// EN : Orders not yet shipped to ShaQ (for the auto catch-up job).
+async function listUnshipped(limit = 200) {
+  const { rows } = await query(
+    `SELECT id, order_number
+       FROM orders
+      WHERE shaq_tracking_id IS NULL AND archived = FALSE
+        AND delivery_status NOT IN ('cancelled','delivered','returned_to_sender','return_to_central')
+      ORDER BY created_at ASC
+      LIMIT $1`,
+    [limit]
+  );
+  return rows;
+}
+
 // FR : Récupère une commande par order_number.
 // EN : Fetch an order by order_number.
 async function findByOrderNumber(orderNumber) {
@@ -330,6 +345,7 @@ module.exports = {
   findByTracking,
   findByOrderNumber,
   listTracked,
+  listUnshipped,
   setShaqTracking,
   upsertByOrderNumber,
   findItems,

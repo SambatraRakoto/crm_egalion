@@ -227,15 +227,40 @@ async function registerWebhooks() {
 
 // ---- Real-time webhooks (pushed by Shopify on each event) ----
 
+/**
+ * Auto-ship an order to ShaQ right after it lands from Shopify.
+ * Never throws: a ShaQ failure must NOT make the webhook fail (Shopify would
+ * retry endlessly). The order stays un-shipped and can be retried later.
+ * Required lazily to avoid a circular dependency (shaq.service ↔ shopify.service).
+ */
+// FR : Envoie automatiquement une commande à ShaQ (sans jamais faire échouer le webhook).
+// EN : Auto-ship an order to ShaQ (never fails the webhook).
+async function autoShipToShaq(orderId, mapped) {
+  if (!config.shaq.autoShip) return;            // disabled
+  if (mapped.deliveryStatus === 'cancelled') return; // never ship a cancelled order
+  try {
+    const shaqService = require('./shaq.service');
+    const res = await shaqService.sendOrderToShaq(orderId);
+    logger.info(`Auto-ship ShaQ: order ${mapped.orderNumber} -> tracking ${res.trackingNumber}`);
+  } catch (err) {
+    // "already sent" (has tracking) is expected on orders/updated re-fires — quiet.
+    const msg = err && err.message ? err.message : String(err);
+    if (/déjà envoyée|already/i.test(msg)) return;
+    logger.warn(`Auto-ship ShaQ failed for order ${mapped.orderNumber}: ${msg}`);
+  }
+}
+
 /** Upsert a single order received from a Shopify orders/create|updated webhook. */
-// FR : Traite un webhook commande create/updated (upsert).
-// EN : Handle an order create/updated webhook (upsert).
+// FR : Traite un webhook commande create/updated (upsert + envoi auto ShaQ).
+// EN : Handle an order create/updated webhook (upsert + auto-ship to ShaQ).
 async function handleOrderWebhook(payload) {
   if (!payload || !payload.id) throw ApiError.badRequest('Payload commande Shopify invalide');
   const mapped = mapOrder(payload);
-  await shopifyRepo.upsertOrder(mapped);
+  const orderId = await shopifyRepo.upsertOrder(mapped);
   await shopifyRepo.touchLastSynced();
   logger.info(`Shopify webhook: order ${mapped.shopifyOrderId} (${mapped.orderNumber}) upserted`);
+  // Automatic forward to ShaQ (Shopify → CRM → ShaQ). Non-blocking on failure.
+  await autoShipToShaq(orderId, mapped);
   return { shopifyOrderId: mapped.shopifyOrderId, orderedAt: mapped.orderedAt };
 }
 

@@ -82,6 +82,14 @@ const config = {
     sourceAddress: process.env.SHAQ_SOURCE_ADDRESS || 'Accra, Ghana',
     // Prefix for our order references == ShaQ partner_ref (dedup key).
     orderRefPrefix: process.env.SHAQ_ORDER_PREFIX || '#NA-',
+    // Auto-ship: every Shopify order received is sent to ShaQ automatically.
+    // Default ON when credentials are set; can be forced via SHAQ_AUTO_SHIP.
+    autoShip: process.env.SHAQ_AUTO_SHIP
+      ? process.env.SHAQ_AUTO_SHIP === 'true'
+      : Boolean(process.env.SHAQ_IDENTIFIER && process.env.SHAQ_SECRET),
+    // Catch-up job: periodically ship Pending orders not yet sent (e.g. orders
+    // received while ShaQ was down). Minutes between runs (0 disables it).
+    retryIntervalMinutes: Number(process.env.SHAQ_RETRY_INTERVAL_MINUTES || 15),
   },
 };
 

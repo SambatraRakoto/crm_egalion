@@ -65,6 +65,10 @@ services:
       SHAQ_IDENTIFIER: ${SHAQ_IDENTIFIER:-}
       SHAQ_SECRET: ${SHAQ_SECRET:-}
       SHAQ_WEBHOOK_SECRET: ${SHAQ_WEBHOOK_SECRET:-}
+      # Auto-ship every Shopify order to ShaQ (default: on when credentials set).
+      SHAQ_AUTO_SHIP: ${SHAQ_AUTO_SHIP:-true}
+      # Catch-up job: minutes between retries for Pending orders (0 disables).
+      SHAQ_RETRY_INTERVAL_MINUTES: ${SHAQ_RETRY_INTERVAL_MINUTES:-15}
     networks:
       - nuruya
 

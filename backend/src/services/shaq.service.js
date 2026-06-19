@@ -269,6 +269,36 @@ async function syncStatuses({ limit = 1000 } = {}) {
   return { checked, changed, errors };
 }
 
+/**
+ * Catch-up: ship every Pending order that has no tracking yet.
+ * Used by the periodic job and the manual endpoint. Each order is shipped with
+ * sendOrderToShaq's own dedup guard; failures are isolated (one bad order does
+ * not stop the batch).
+ */
+// FR : Rattrapage — envoie à ShaQ toutes les commandes Pending non expédiées.
+// EN : Catch-up — ship every Pending order not yet sent to ShaQ.
+async function shipPendingOrders({ limit = 200 } = {}) {
+  const pending = await orderRepo.listUnshipped(limit);
+  let shipped = 0;
+  let failed = 0;
+  for (const o of pending) {
+    try {
+      await sendOrderToShaq(o.id);
+      shipped++;
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      // "already sent" shouldn't appear here (filtered by listUnshipped), but stay safe.
+      if (/déjà envoyée|already/i.test(msg)) continue;
+      failed++;
+      logger.warn(`Catch-up ShaQ: order ${o.order_number || o.id} failed: ${msg}`);
+    }
+  }
+  if (pending.length) {
+    logger.info(`Catch-up ShaQ: ${shipped} expédiée(s), ${failed} échec(s) sur ${pending.length} en attente`);
+  }
+  return { attempted: pending.length, shipped, failed };
+}
+
 module.exports = {
   handleWebhook,
   listEvents,
@@ -276,4 +306,5 @@ module.exports = {
   sendOrderToShaq,
   importPackages,
   syncStatuses,
+  shipPendingOrders,
 };
