@@ -29,13 +29,20 @@ function partnerRefFor(order) {
 // FR : Extrait tracking/statut/date d'un payload webhook ShaQ.
 // EN : Extract tracking/status/date from a ShaQ webhook payload.
 function parsePayload(body) {
+  const d = body.data || {};
   const trackingId =
-    body.tracking_id || body.trackingId || body.waybill || body.reference || (body.data && body.data.tracking_id);
+    body.tracking_id || body.trackingId || body.trackingNumber || body.waybill ||
+    d.tracking_id || d.trackingId || d.trackingNumber;
+  // partner_ref is OUR reference at ShaQ ("SHOPIFY-<n>"). Kept separate from the
+  // tracking number so an order can be matched by either, despite the #NA rename.
+  const partnerRef =
+    body.partner_ref || body.partnerRef || body.reference ||
+    d.partner_ref || d.partnerRef || d.reference || null;
   const rawStatus =
-    body.status || body.event || body.state || (body.data && (body.data.status || body.data.state));
+    body.status || body.event || body.state || (d.status || d.state);
   const description = body.description || body.message || body.note || null;
   const occurredAt = body.timestamp || body.occurred_at || body.updated_at || null;
-  return { trackingId, rawStatus, description, occurredAt };
+  return { trackingId, partnerRef, rawStatus, description, occurredAt };
 }
 
 /**
@@ -45,11 +52,28 @@ function parsePayload(body) {
 // FR : Traite un événement de livraison ShaQ (journalise + maj commande).
 // EN : Process a ShaQ delivery event (log + update order).
 async function handleWebhook(body) {
-  const { trackingId, rawStatus, description, occurredAt } = parsePayload(body);
+  const { trackingId, partnerRef, rawStatus, description, occurredAt } = parsePayload(body);
   if (!rawStatus) throw ApiError.badRequest('Statut ShaQ manquant dans le payload');
 
   const mapped = mapShaqStatus(rawStatus);
-  const order = trackingId ? await orderRepo.findByTracking(trackingId) : null;
+  // Match the order robustly, in priority order, so status tracking keeps working
+  // even though our order_number is "#NA<n>" while ShaQ uses partner_ref "SHOPIFY-<n>":
+  //   1) by tracking number (the rename-proof key);
+  //   2) by partner_ref -> our order_number "#NA<n>";
+  //   3) by the origin-ref marker stored in shaq_tracking_id ("SHOPIFY-<n>").
+  let order = trackingId ? await orderRepo.findByTracking(trackingId) : null;
+  if (!order && partnerRef) {
+    // Try the partner_ref as-is (it usually equals our order_number), then both
+    // naming variants, then the origin-ref marker — covers SHOPIFY-<n> (historical)
+    // and #NA<n> (current) without depending on which scheme an order uses.
+    const num = String(partnerRef).replace(/[^0-9]/g, '');
+    order = await orderRepo.findByOrderNumber(String(partnerRef));
+    if (!order && num) {
+      order = await orderRepo.findByOrderNumber(`SHOPIFY-${num}`)
+        || await orderRepo.findByOrderNumber(`#NA${num}`)
+        || await orderRepo.findByTracking(`SHOPIFY-${num}`);
+    }
+  }
 
   // Keep the event log faithful: store the mapped status, or the normalized raw
   // term when unknown (capped to the column width) — never a misleading sentinel.

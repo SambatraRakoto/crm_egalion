@@ -22,27 +22,34 @@ const FILTER_TABS = ["All", ...Object.keys(STATUS_CATEGORIES)];
 const PAGE_SIZE = 25;
 const DATE_PRESETS = ["Yesterday", "Today", "This Week", "This Month", "Custom"];
 
+// Calendar bounds as YYYY-MM-DD strings → timezone-safe (string comparison),
+// so "Today"/"Yesterday"/… match the local calendar day regardless of UTC offset.
+function ymd(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function getPresetRange(preset) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (preset === "Today") return { from: today, to: today };
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (preset === "Today") return { from: ymd(today), to: ymd(today) };
   if (preset === "Yesterday") {
-    const y = new Date(today); y.setDate(y.getDate() - 1);
-    return { from: y, to: y };
+    const y = new Date(today); y.setDate(today.getDate() - 1);
+    return { from: ymd(y), to: ymd(y) };
   }
   if (preset === "This Week") {
-    const mon = new Date(today); mon.setDate(today.getDate() - today.getDay() + 1);
-    return { from: mon, to: today };
+    const since = (now.getDay() + 6) % 7; // days since Monday (ISO week)
+    const mon = new Date(today); mon.setDate(today.getDate() - since);
+    return { from: ymd(mon), to: ymd(today) };
   }
   if (preset === "This Month") {
-    return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: today };
+    return { from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: ymd(today) };
   }
   return null;
 }
 
 function inRange(dateStr, range) {
   if (!range) return true;
-  const d = new Date(dateStr);
+  if (!dateStr) return false;
+  const d = String(dateStr).slice(0, 10); // YYYY-MM-DD
   return d >= range.from && d <= range.to;
 }
 
@@ -101,7 +108,7 @@ export default function Orders({ currency }) {
 
   const dateRange = useMemo(() => {
     if (datePreset === "Custom" && customFrom && customTo) {
-      return { from: new Date(customFrom), to: new Date(customTo) };
+      return { from: customFrom, to: customTo }; // date inputs are YYYY-MM-DD
     }
     if (datePreset && datePreset !== "Custom") return getPresetRange(datePreset);
     return null;
@@ -112,12 +119,10 @@ export default function Orders({ currency }) {
     if (activeTab !== "All") data = data.filter((o) => o.category === activeTab);
     if (search.trim()) {
       const q = search.toLowerCase();
+      const has = (v) => String(v ?? "").toLowerCase().includes(q);
       data = data.filter((o) =>
-        o.id.toLowerCase().includes(q) ||
-        o.customer.toLowerCase().includes(q) ||
-        o.region.toLowerCase().includes(q) ||
-        o.product.toLowerCase().includes(q) ||
-        o.status.toLowerCase().includes(q)
+        has(o.orderNumber) || has(o.id) || has(o.customer) || has(o.phone) ||
+        has(o.region) || has(o.product) || has(o.status) || has(o.shaqTrackingId)
       );
     }
     if (dateRange) data = data.filter((o) => inRange(o.date, dateRange));

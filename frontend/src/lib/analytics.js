@@ -259,20 +259,44 @@ export function financeSummary(orders) {
 }
 
 /** Filter orders by a dashboard period preset. */
-// FR : Filtre les commandes selon une période (today|week|month|year|all). EN : Filter orders by a period preset (today|week|month|year|all).
+// FR : Filtre les commandes par période (today|yesterday|week|month|year|all). EN : Filter orders by a period (today|yesterday|week|month|year|all).
 export function filterByPeriod(orders, period) {
   if (!period || period === 'all' || period === 'All Time') return orders;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const from = new Date(today);
-  if (period === 'today' || period === 'Today') {
-    /* from = today */
-  } else if (period === 'week' || period === 'This Week') {
-    from.setDate(today.getDate() - today.getDay() + 1);
-  } else if (period === 'month' || period === 'This Month') {
-    from.setDate(1);
-  } else if (period === 'year' || period === 'This Year') {
-    from.setMonth(0, 1);
+  const now = new Date();
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  let from = startOfDay(now);
+  let to = null; // exclusive upper bound; null = up to now
+
+  switch (period) {
+    case 'today': case 'Today':
+      from = startOfDay(now);
+      break;
+    case 'yesterday': case 'Yesterday': {
+      const y = new Date(now); y.setDate(now.getDate() - 1);
+      from = startOfDay(y);
+      to = startOfDay(now); // strictly before today
+      break;
+    }
+    case 'week': case 'This Week': {
+      const since = (now.getDay() + 6) % 7; // days since Monday (ISO week)
+      from = startOfDay(now); from.setDate(now.getDate() - since);
+      break;
+    }
+    case 'month': case 'This Month':
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    case 'year': case 'This Year':
+      from = new Date(now.getFullYear(), 0, 1);
+      break;
+    default:
+      return orders;
   }
-  return orders.filter((o) => new Date(o.date) >= from);
+
+  return orders.filter((o) => {
+    const d = new Date(o.date);
+    if (Number.isNaN(d.getTime())) return false;
+    if (d < from) return false;
+    if (to && d >= to) return false;
+    return true;
+  });
 }

@@ -52,7 +52,9 @@ export function normalizeOrder(row) {
   const deliveryGhs = Number(row.delivery_cost ?? 0);
   const shaqGhs = Number(row.shaq_cost ?? 0);
   // First line item (from the list query's LATERAL join, or the items array).
-  const firstName = row.first_product ?? items?.[0]?.name ?? row.order_number ?? '';
+  // Product name only — never fall back to the order number (keeps the Product
+  // column coherent; the UI shows "—" when there is no product).
+  const firstName = row.first_product ?? items?.[0]?.name ?? '';
   const quantity = Number(row.first_quantity ?? row.total_quantity ?? items?.[0]?.quantity ?? 0);
   const unitPriceGhs = Number(row.first_unit_price ?? items?.[0]?.unitPriceUSD ?? 0);
   // commission ShaQ = 5% × order amount (dynamic).

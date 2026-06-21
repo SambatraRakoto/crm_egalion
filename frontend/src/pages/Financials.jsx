@@ -37,6 +37,7 @@ const lineOpts = {
 // Period presets understood by the backend (/finance/summary?period=…).
 const PERIODS = [
   { label: "Today", value: "today" },
+  { label: "Yesterday", value: "yesterday" },
   { label: "This week", value: "week" },
   { label: "This month", value: "month" },
   { label: "This year", value: "year" },

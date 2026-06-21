@@ -58,6 +58,7 @@ const hBarOpts = {
 // UI label → backend period key understood by the dashboard service.
 const DATE_FILTERS = [
   { label: "Today", value: "today" },
+  { label: "Yesterday", value: "yesterday" },
   { label: "This Week", value: "week" },
   { label: "This Month", value: "month" },
   { label: "This Year", value: "year" },

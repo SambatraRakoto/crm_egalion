@@ -48,7 +48,7 @@ async function listTracked(limit = 1000) {
   const { rows } = await query(
     `SELECT id, order_number, shaq_tracking_id, delivery_status
        FROM orders
-      WHERE shaq_tracking_id IS NOT NULL AND archived = FALSE
+      WHERE shaq_tracking_id IS NOT NULL AND shaq_tracking_id NOT LIKE 'SHOPIFY-%' AND archived = FALSE
         AND delivery_status NOT IN ('delivered','returned_to_sender','return_to_central','cancelled')
       ORDER BY updated_at ASC
       LIMIT $1`,
