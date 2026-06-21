@@ -27,7 +27,10 @@ export function kpis(orders) {
   const count = orders.length;
   const revenueUsd = orders.reduce((s, o) => s + o.amountUSD, 0);
   const logisticsUsd = orders.reduce((s, o) => s + o.deliveryCostUSD, 0);
-  const shaqUsd = orders.reduce((s, o) => s + o.shaqCostUSD, 0);
+  // Commission ShaQ = 5% of order amount (dynamic, never read from the dead
+  // shaq_cost column). Total ShaQ fees = delivery fee + commission.
+  const commissionUsd = round2(revenueUsd * 0.05);
+  const shaqFeesUsd = round2(logisticsUsd + commissionUsd);
   const delivered = orders.filter((o) => DELIVERED.includes(o.status)).length;
   const returned = orders.filter((o) => o.category === CATEGORY.RETURNS).length;
   const issues = orders.filter((o) => o.category === CATEGORY.ISSUES_EXCEPTIONS).length;
@@ -46,7 +49,8 @@ export function kpis(orders) {
     totalOrders: count,
     revenue: { usd: round2(revenueUsd), ghs: ghs(revenueUsd) },
     totalLogistics: { usd: round2(logisticsUsd), ghs: ghs(logisticsUsd) },
-    totalShaq: { usd: round2(shaqUsd), ghs: ghs(shaqUsd) },
+    commissionShaq: { usd: commissionUsd, ghs: ghs(commissionUsd) },
+    totalShaq: { usd: shaqFeesUsd, ghs: ghs(shaqFeesUsd) },
     avgOrderValue: count
       ? { usd: round2(revenueUsd / count), ghs: ghs(revenueUsd / count) }
       : { usd: 0, ghs: 0 },
@@ -55,7 +59,7 @@ export function kpis(orders) {
     deliveryRate: count ? ((delivered / count) * 100).toFixed(1) : '0.0',
     returnRate: count ? ((returned / count) * 100).toFixed(1) : '0.0',
     cancellationRate: count ? ((issues / count) * 100).toFixed(1) : '0.0',
-    netMargin: revenueUsd ? (((revenueUsd - shaqUsd) / revenueUsd) * 100).toFixed(1) : '0.0',
+    netMargin: revenueUsd ? (((revenueUsd - shaqFeesUsd) / revenueUsd) * 100).toFixed(1) : '0.0',
   };
 }
 

@@ -240,7 +240,12 @@ async function main() {
       if (res.rows[0].inserted) inserted++; else updated++;
       const orderId = res.rows[0].id;
       await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
-      await client.query(`INSERT INTO order_items (order_id, product_name, quantity, unit_price) VALUES ($1,$2,$3,$4)`, [orderId, o.product, o.quantity, o.unitPrice]);
+      // Resolve product_id by name so the finance supplier-cost join works.
+      await client.query(
+        `INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price)
+         VALUES ($1, (SELECT id FROM products WHERE lower(trim(name)) = lower(trim($2)) LIMIT 1), $2, $3, $4)`,
+        [orderId, o.product, o.quantity, o.unitPrice]
+      );
     }
     await client.query('COMMIT');
   } catch (err) { await client.query('ROLLBACK'); throw err; } finally { client.release(); }
