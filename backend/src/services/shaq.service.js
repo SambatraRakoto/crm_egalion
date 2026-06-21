@@ -4,6 +4,7 @@ const orderRepo = require('../repositories/order.repository');
 const eventRepo = require('../repositories/deliveryEvent.repository');
 const { mapShaqStatus } = require('../utils/shaqStatus');
 const { parsePagination } = require('../utils/queryParams');
+const { resolveDateRange } = require('../utils/dateRange');
 const shaqClient = require('../utils/shaqClient');
 const tariff = require('../utils/shaqTariff');
 const config = require('../config');
@@ -118,11 +119,17 @@ async function handleWebhook(body) {
 // EN : Paginated list of delivery events.
 async function listEvents(query) {
   const { page, limit, offset } = parsePagination(query);
+  // period/from/to → date bounds (today, yesterday, week, month, custom…).
+  const { from, to } = resolveDateRange(query);
   const { total, rows } = await eventRepo.list({
     limit,
     offset,
     trackingId: query.trackingId,
     status: query.status,
+    search: query.search,
+    region: query.region,
+    from,
+    to,
   });
   return { rows, page, limit, total };
 }

@@ -5,7 +5,7 @@ const NAV_ITEMS = [
   { id: "dashboard", label: "Analytics", icon: LayoutDashboard },
   { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "products", label: "Products", icon: Package },
-  { id: "delivery", label: "Delivery", icon: Truck },
+  { id: "delivery", label: "Delivered", icon: Truck },
   { id: "financials", label: "Financials", icon: DollarSign, roles: ["admin", "super_admin", "manager", "finance"] },
   { id: "users", label: "Users", icon: UsersIcon, roles: ["admin", "super_admin"] },
   { id: "audit", label: "Audit Log", icon: Shield, roles: ["admin", "super_admin"] },

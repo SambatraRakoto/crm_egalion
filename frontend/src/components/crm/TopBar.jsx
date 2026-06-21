@@ -9,7 +9,7 @@ const PAGE_TITLES = {
   orders: "Order Management",
   products: "Product Management",
   financials: "Financial Dashboard",
-  delivery: "Delivery Tracking",
+  delivery: "Delivered Orders",
   users: "User Management",
   audit: "Audit Log",
 };

@@ -19,7 +19,7 @@ export default function CRM() {
     if (activePage === "dashboard") return <Dashboard currency={currency} />;
     if (activePage === "orders") return <Orders currency={currency} />;
     if (activePage === "products") return <Products currency={currency} />;
-    if (activePage === "delivery") return <Delivery />;
+    if (activePage === "delivery") return <Delivery currency={currency} />;
     if (activePage === "financials") return <Financials currency={currency} />;
     if (activePage === "users") return <Users />;
     if (activePage === "audit") return <AuditLogs />;

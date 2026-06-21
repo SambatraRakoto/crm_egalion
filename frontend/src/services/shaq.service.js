@@ -29,9 +29,12 @@ function normalizeEvent(row = {}) {
   return {
     id: row.id,
     orderId: row.orderId ?? row.order_id ?? null,
+    orderNumber: row.orderNumber ?? row.order_number ?? null,
+    customer: row.customerName ?? row.customer_name ?? '',
+    region: row.region ?? '',
     trackingId: row.trackingId ?? row.tracking_id ?? '',
     status,
-    statusLabel: displayForCanonical(status),
+    statusLabel: displayForCanonical(status) || status,
     rawStatus: row.rawStatus ?? row.raw_status ?? '',
     description: row.description ?? '',
     occurredAt: row.occurredAt ?? row.occurred_at ?? row.created_at ?? null,
