@@ -39,7 +39,8 @@ export function kpis(orders) {
   const avgDeliveryDays = deliveredOrders.length
     ? round2(
         deliveredOrders.reduce(
-          (s, o) => s + Math.max(0, (new Date(o.updatedAt) - new Date(o.date)) / 86400000),
+          // Real lead time: delivered date − order date (fallback to updatedAt).
+          (s, o) => s + Math.max(0, (new Date(o.deliveredAt || o.updatedAt) - new Date(o.date)) / 86400000),
           0,
         ) / deliveredOrders.length,
       )
@@ -264,8 +265,18 @@ export function financeSummary(orders) {
 
 /** Filter orders by a dashboard period preset. */
 // FR : Filtre les commandes par période (today|yesterday|week|month|year|all). EN : Filter orders by a period (today|yesterday|week|month|year|all).
-export function filterByPeriod(orders, period) {
+export function filterByPeriod(orders, period, custom) {
   if (!period || period === 'all' || period === 'All Time') return orders;
+  // Custom [from, to] range (YYYY-MM-DD strings, inclusive, timezone-safe).
+  if (period === 'custom' || period === 'Custom') {
+    const from = custom && custom.from;
+    const to = custom && custom.to;
+    if (!from || !to) return orders;
+    return orders.filter((o) => {
+      const d = String(o.date).slice(0, 10);
+      return d >= from && d <= to;
+    });
+  }
   const now = new Date();
   const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   let from = startOfDay(now);

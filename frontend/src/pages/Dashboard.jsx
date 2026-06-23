@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import {
   ShoppingCart, TrendingUp, RotateCcw, Package,
-  DollarSign, Truck, AlertTriangle, Download,
+  DollarSign, Truck, AlertTriangle, Download, X,
 } from "lucide-react";
 import KpiCard from "../components/crm/KpiCard";
 import { useOrders } from "@/hooks/useOrders";
@@ -72,6 +72,9 @@ export default function Dashboard({ currency }) {
   const [period, setPeriod] = useState("all");
   // FR : Filtre par statut de livraison ('all' = tous). EN : Delivery-status filter ('all' = all).
   const [statusFilter, setStatusFilter] = useState("all");
+  // FR : Plage personnalisée (YYYY-MM-DD). EN : Custom date range (YYYY-MM-DD).
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   // Orders are fetched ONCE (shared React Query cache); switching period/status
   // re-aggregates in memory — no re-fetch, so date filters respond instantly.
@@ -80,23 +83,25 @@ export default function Dashboard({ currency }) {
   const data = useMemo(() => {
     let active = orders.filter((o) => !o.archived);
     if (statusFilter !== "all") active = active.filter((o) => o.status === statusFilter);
-    const periodOrders = analytics.filterByPeriod(active, period);
+    // Period scopes the "snapshot" metrics (KPIs, funnel, distribution, regions,
+    // products). Time-series charts keep the full history to show the evolution.
+    const scoped = analytics.filterByPeriod(active, period, { from: customFrom, to: customTo });
     return {
       usdToGhs: config.usdToGhs,
-      totalOrdersInPeriod: periodOrders.length,
-      kpis: analytics.kpis(periodOrders),
+      totalOrdersInPeriod: scoped.length,
+      kpis: analytics.kpis(scoped),
       ordersByMonth: analytics.ordersByMonth(active),
       ordersByWeek: analytics.ordersByWeek(active),
       ordersByDate: analytics.ordersByDate(active),
       revenueByMonth: analytics.revenueByMonth(active),
-      bestSellingProducts: analytics.bestSellingProducts(active),
-      topRegions: analytics.topRegions(active),
-      regionRevenue: analytics.regionRevenue(active),
-      statusDistribution: analytics.statusDistribution(active),
-      deliveryFunnel: analytics.deliveryFunnel(active),
-      cancellationByRegion: analytics.cancellationByRegion(active),
+      bestSellingProducts: analytics.bestSellingProducts(scoped),
+      topRegions: analytics.topRegions(scoped),
+      regionRevenue: analytics.regionRevenue(scoped),
+      statusDistribution: analytics.statusDistribution(scoped),
+      deliveryFunnel: analytics.deliveryFunnel(scoped),
+      cancellationByRegion: analytics.cancellationByRegion(scoped),
     };
-  }, [orders, period, statusFilter]);
+  }, [orders, period, statusFilter, customFrom, customTo]);
 
   if (isLoading && !orders.length) return <LoadingState label="Loading analytics…" />;
   if (isError) return <ErrorState error={error} onRetry={refetch} title="Could not load analytics" />;
@@ -108,7 +113,9 @@ export default function Dashboard({ currency }) {
     cancellationByRegion: cancByRegion, totalOrdersInPeriod, usdToGhs,
   } = data;
 
-  const periodLabel = DATE_FILTERS.find((f) => f.value === period)?.label || "All Time";
+  const periodLabel = period === "custom" && customFrom && customTo
+    ? `${customFrom} → ${customTo}`
+    : (DATE_FILTERS.find((f) => f.value === period)?.label || "All Time");
   const donutTotal = statusDist.reduce((s, x) => s + x.count, 0) || 1;
 
   const totalRev = kpis.revenue;
@@ -184,6 +191,23 @@ export default function Dashboard({ currency }) {
                 {f.label}
               </button>
             ))}
+          </div>
+          {/* Custom date range — selecting both dates activates the "custom" period */}
+          <div className={`flex items-center gap-1.5 bg-white border rounded-xl px-2.5 py-1.5 ${period === "custom" ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"}`}
+            title="Custom date range">
+            <input type="date" value={customFrom}
+              onChange={(e) => { setCustomFrom(e.target.value); if (e.target.value && customTo) setPeriod("custom"); }}
+              className="text-xs text-slate-600 bg-transparent outline-none w-[7.5rem]" />
+            <span className="text-slate-300 text-xs">→</span>
+            <input type="date" value={customTo} min={customFrom || undefined}
+              onChange={(e) => { setCustomTo(e.target.value); if (customFrom && e.target.value) setPeriod("custom"); }}
+              className="text-xs text-slate-600 bg-transparent outline-none w-[7.5rem]" />
+            {period === "custom" && (
+              <button onClick={() => { setPeriod("all"); setCustomFrom(""); setCustomTo(""); }}
+                className="ml-0.5 text-slate-400 hover:text-rose-500" title="Clear custom range">
+                <X size={13} />
+              </button>
+            )}
           </div>
           {/* Delivery-status filter (grouped by ShaQ category) */}
           <select
