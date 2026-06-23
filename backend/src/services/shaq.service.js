@@ -186,7 +186,21 @@ async function sendOrderToShaq(orderId) {
     })),
   };
 
-  const resp = await shaqClient.createPackage(payload);
+  let resp;
+  try {
+    resp = await shaqClient.createPackage(payload);
+  } catch (err) {
+    // The package already exists at ShaQ (partner_ref is unique). Instead of
+    // failing, recover the existing package's tracking → idempotent, self-healing.
+    if (err.statusCode === 422 && /already been taken|partner_ref/i.test(err.message || '')) {
+      logger.info(`ShaQ: ${partnerRef} déjà présent — récupération du colis existant`);
+      const existing = await shaqClient.findByPartnerRef(partnerRef);
+      if (!existing) throw ApiError.internal(`Colis ${partnerRef} déjà chez ShaQ mais introuvable dans la liste`);
+      resp = { data: existing };
+    } else {
+      throw err;
+    }
+  }
   const data = resp?.data || resp || {};
   const trackingNumber = pick(data, 'trackingNumber', 'tracking_number', 'tracking');
   const status = mapShaqStatus(pick(data, 'status') || 'pending') || 'pending';

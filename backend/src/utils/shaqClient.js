@@ -101,6 +101,22 @@ const shaqClient = {
   getPackage: (partnerRef) => request(`/packages/${encodeURIComponent(partnerRef)}`),
   /** Track by tracking number (status + history). */
   track: (trackingNumber) => request(`/tracking/${encodeURIComponent(trackingNumber)}`),
+  /**
+   * Find an existing package by partner_ref by scanning the (date-desc) list.
+   * ShaQ's GET /packages/{ref} 404s and the ?partner_ref filter is ignored, so
+   * we page through the list. Returns the package row, or null.
+   */
+  async findByPartnerRef(partnerRef, maxPages = 30, limit = 50) {
+    for (let page = 1; page <= maxPages; page++) {
+      const body = await request('/packages', { query: { page, limit } });
+      const list = (body && body.data && (body.data.list || body.data.packages)) || [];
+      const arr = Array.isArray(list) ? list : [];
+      const hit = arr.find((p) => (p.partnerRef || p.partner_ref) === partnerRef);
+      if (hit) return hit;
+      if (arr.length < limit) break; // last page reached
+    }
+    return null;
+  },
 };
 
 module.exports = shaqClient;
