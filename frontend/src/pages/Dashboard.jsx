@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import {
   ShoppingCart, TrendingUp, RotateCcw, Package,
   DollarSign, Truck, AlertTriangle, Download,
 } from "lucide-react";
 import KpiCard from "../components/crm/KpiCard";
-import { useDashboard } from "@/hooks/useDashboard";
+import { useOrders } from "@/hooks/useOrders";
+import * as analytics from "@/lib/analytics";
+import { config } from "@/config/env";
 import { STATUS_CATEGORIES } from "@/lib/orderStatus";
 import { LoadingState } from "@/components/feedback/LoadingState";
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -71,11 +73,33 @@ export default function Dashboard({ currency }) {
   // FR : Filtre par statut de livraison ('all' = tous). EN : Delivery-status filter ('all' = all).
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const { data, isLoading, isError, error, refetch } = useDashboard(period, statusFilter);
+  // Orders are fetched ONCE (shared React Query cache); switching period/status
+  // re-aggregates in memory — no re-fetch, so date filters respond instantly.
+  const { data: orders = [], isLoading, isError, error, refetch } = useOrders();
 
-  if (isLoading && !data) return <LoadingState label="Loading analytics…" />;
+  const data = useMemo(() => {
+    let active = orders.filter((o) => !o.archived);
+    if (statusFilter !== "all") active = active.filter((o) => o.status === statusFilter);
+    const periodOrders = analytics.filterByPeriod(active, period);
+    return {
+      usdToGhs: config.usdToGhs,
+      totalOrdersInPeriod: periodOrders.length,
+      kpis: analytics.kpis(periodOrders),
+      ordersByMonth: analytics.ordersByMonth(active),
+      ordersByWeek: analytics.ordersByWeek(active),
+      ordersByDate: analytics.ordersByDate(active),
+      revenueByMonth: analytics.revenueByMonth(active),
+      bestSellingProducts: analytics.bestSellingProducts(active),
+      topRegions: analytics.topRegions(active),
+      regionRevenue: analytics.regionRevenue(active),
+      statusDistribution: analytics.statusDistribution(active),
+      deliveryFunnel: analytics.deliveryFunnel(active),
+      cancellationByRegion: analytics.cancellationByRegion(active),
+    };
+  }, [orders, period, statusFilter]);
+
+  if (isLoading && !orders.length) return <LoadingState label="Loading analytics…" />;
   if (isError) return <ErrorState error={error} onRetry={refetch} title="Could not load analytics" />;
-  if (!data) return null;
 
   const {
     kpis, ordersByMonth: byMonth, ordersByWeek: byWeek, ordersByDate: byDate,

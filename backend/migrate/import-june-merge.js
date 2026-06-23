@@ -109,7 +109,9 @@ function readCsv(file) {
     byNum.set(num, {
       customerName: [r[C('Nom')], r[C('Prénom')]].filter(Boolean).join(' ').trim() || null,
       customerEmail: r[C('Email')] || null, customerPhone: r[C('Téléphone')] || null, address: r[C('Adresse')] || null,
-      product: r[C('Produit')] || null, quantity: Number(r[C('Quantité')]) || 1, unitPrice: Number(r[C('Prix')]) || 0,
+      product: r[C('Produit')] || null, quantity: Number(r[C('Quantité')]) || 1,
+      // "Prix" is the ORDER TOTAL (after quantity discount), not the unit price.
+      lineTotal: Number(r[C('Prix')]) || 0,
       region: regionFromText(r[C('Adresse')]), frStatus: (r[C('Statut')] || '').toLowerCase().trim(),
       tracking: extractTracking(r[C('Notes')]), notes: cleanNotes(r[C('Notes')]),
       date: r[C('Date')] || null, deliveredAt: r[C('Date Livraison')] || null,
@@ -150,7 +152,8 @@ function readSqlDump(file) {
     if (!byNum.has(num)) byNum.set(num, {
       customerName: [o.nom, o.prenom].filter(Boolean).join(' ').trim() || null,
       customerEmail: o.email || null, customerPhone: o.telephone || null, address: o.adresse || null,
-      product: o.produit || null, quantity: Number(o.quantite) || 1, unitPrice: Number(o.prix) || 0,
+      product: o.produit || null, quantity: Number(o.quantite) || 1,
+      lineTotal: Number(o.prix) || 0, // ORDER TOTAL (after discount), not unit price
       deliveryFee: Number(o.frais_livraison) || 0, frStatus: (o.statut || '').toLowerCase().trim(),
       tracking: extractTracking(o.notes), notes: cleanNotes(o.notes),
       date: o.date_creation || null, deliveredAt: o.date_livraison || null,
@@ -167,8 +170,10 @@ function mergeOrder(num, shaq, crm) {
   else if (crm) status = FR_STATUS[crm.frStatus] || 'pending';
 
   const quantity = crm ? crm.quantity : 1;
-  const unitPrice = crm ? crm.unitPrice : (shaq ? shaq.packageValue : 0);
-  const orderAmount = crm ? Number((crm.unitPrice * crm.quantity).toFixed(2)) : (shaq ? shaq.packageValue : 0);
+  // Order amount = the line total (CRM "Prix" or manifest package value).
+  // Unit price is DERIVED = amount / quantity (so amount = unit × qty stays true).
+  const orderAmount = crm ? crm.lineTotal : (shaq ? shaq.packageValue : 0);
+  const unitPrice = quantity > 0 ? Number((orderAmount / quantity).toFixed(2)) : orderAmount;
   // Region: manifest first, else parsed from the CRM address.
   const region = (shaq && shaq.region) || (crm && crm.region) || null;
   // Delivery fee = ShaQ regional tariff (contract grid). Falls back to the
@@ -211,6 +216,21 @@ async function main() {
   for (const [num, c] of crmByNum) if (c.date && c.date >= JUNE_FROM && c.date < JUNE_TO) allNums.add(num);
 
   const orders = [...allNums].sort((a, b) => a - b).map((num) => mergeOrder(num, shaqByNum.get(num), crmByNum.get(num)));
+
+  // Unit price = CATALOG base price (per piece): the amount of a single-unit order
+  // of the same product. Bundle orders then show the per-piece price (e.g. 200),
+  // not the discounted amount/qty. order_amount stays the real (discounted) total.
+  const basePrice = new Map();
+  for (const o of orders) {
+    if (o.quantity === 1 && o.product && o.orderAmount > 0 && !basePrice.has(o.product)) {
+      basePrice.set(o.product, o.orderAmount);
+    }
+  }
+  for (const o of orders) {
+    const base = basePrice.get(o.product);
+    if (base) o.unitPrice = base; // else keep the amount/qty fallback from mergeOrder
+  }
+
   const withProduct = orders.filter((o) => o.product).length;
   const withTracking = orders.filter((o) => o.shaqTrackingId && !o.shaqTrackingId.startsWith('SHOPIFY-')).length;
   console.log(`Manifeste: ${shaqByNum.size} | CRM (SQL+CSV): ${crmByNum.size}`);
