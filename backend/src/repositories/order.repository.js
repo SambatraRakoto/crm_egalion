@@ -239,6 +239,9 @@ async function remove(id) {
 // FR : Aligne ordered_at sur le 1er événement ShaQ.
 // EN : Align ordered_at with the earliest ShaQ event.
 async function setOrderedAtFromEvents(orderId) {
+  // Only fill ordered_at when it is still unknown (NULL). An order that already
+  // has a date (from Shopify or the migration) keeps it — a status update must
+  // NEVER change the order/creation date.
   const { rows } = await query(
     `UPDATE orders o
         SET ordered_at = e.min_occurred
@@ -247,7 +250,7 @@ async function setOrderedAtFromEvents(orderId) {
          FROM delivery_events
          WHERE order_id = $1 AND occurred_at IS NOT NULL
        ) e
-      WHERE o.id = $1 AND e.min_occurred IS NOT NULL
+      WHERE o.id = $1 AND o.ordered_at IS NULL AND e.min_occurred IS NOT NULL
       RETURNING o.ordered_at`,
     [orderId]
   );
