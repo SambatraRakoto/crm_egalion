@@ -4,10 +4,11 @@ const { query } = require('../database/pool');
 
 // FR : Insère un événement de livraison.
 // EN : Insert a delivery event.
-async function insert({ orderId, trackingId, status, rawStatus, description, payload, occurredAt }) {
+async function insert({ orderId, trackingId, status, rawStatus, description, payload, occurredAt, eventId }) {
   const { rows } = await query(
-    `INSERT INTO delivery_events (order_id, tracking_id, status, raw_status, description, payload, occurred_at)
-     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, now()))
+    `INSERT INTO delivery_events (order_id, tracking_id, status, raw_status, description, payload, occurred_at, event_id)
+     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, now()),$8)
+     ON CONFLICT (event_id) WHERE event_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [
       orderId || null,
@@ -17,8 +18,10 @@ async function insert({ orderId, trackingId, status, rawStatus, description, pay
       description || null,
       payload ? JSON.stringify(payload) : null,
       occurredAt || null,
+      eventId || null,
     ]
   );
+  // undefined when a duplicate event_id was skipped (idempotent replay).
   return rows[0];
 }
 

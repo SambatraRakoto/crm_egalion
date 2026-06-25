@@ -209,6 +209,11 @@ CREATE TABLE IF NOT EXISTS delivery_events (
 );
 CREATE INDEX IF NOT EXISTS idx_delivery_events_order ON delivery_events (order_id);
 CREATE INDEX IF NOT EXISTS idx_delivery_events_tracking ON delivery_events (tracking_id);
+-- Idempotent: webhook idempotency key. ShaQ sends a unique event_id per push;
+-- a partial unique index lets us skip duplicate deliveries (ON CONFLICT DO NOTHING).
+ALTER TABLE delivery_events ADD COLUMN IF NOT EXISTS event_id VARCHAR(100);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_delivery_events_event_id
+  ON delivery_events (event_id) WHERE event_id IS NOT NULL;
 
 -- ===========================================================================
 -- Shopify settings & sync logs

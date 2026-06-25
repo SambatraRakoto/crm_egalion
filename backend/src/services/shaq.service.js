@@ -31,19 +31,27 @@ function partnerRefFor(order) {
 // EN : Extract tracking/status/date from a ShaQ webhook payload.
 function parsePayload(body) {
   const d = body.data || {};
+  // ShaQ wraps everything in an envelope: { event, event_id, occurred_at, data }.
+  const eventType = body.event || body.event_type || null;
+  const eventId = body.event_id || body.eventId || null;
   const trackingId =
     body.tracking_id || body.trackingId || body.trackingNumber || body.waybill ||
-    d.tracking_id || d.trackingId || d.trackingNumber;
+    d.tracking_number || d.tracking_id || d.trackingId || d.trackingNumber;
   // partner_ref is OUR reference at ShaQ ("SHOPIFY-<n>"). Kept separate from the
   // tracking number so an order can be matched by either, despite the #NA rename.
   const partnerRef =
     body.partner_ref || body.partnerRef || body.reference ||
     d.partner_ref || d.partnerRef || d.reference || null;
-  const rawStatus =
-    body.status || body.event || body.state || (d.status || d.state);
-  const description = body.description || body.message || body.note || null;
-  const occurredAt = body.timestamp || body.occurred_at || body.updated_at || null;
-  return { trackingId, partnerRef, rawStatus, description, occurredAt };
+  // The delivery status lives in data.status (ShaQ envelope) or body.status
+  // (legacy). NEVER read it from body.event — that is the EVENT TYPE
+  // ("package.status_updated"), not a delivery status.
+  let rawStatus = d.status || d.state || body.status || body.state || null;
+  // Backward-compat for simple shapes like {event:"delivered"}: accept body.event
+  // only when it maps to a known status, so the envelope's type is never misread.
+  if (!rawStatus && body.event && mapShaqStatus(body.event)) rawStatus = body.event;
+  const description = d.description || d.comment || body.description || body.message || body.note || null;
+  const occurredAt = body.occurred_at || body.timestamp || body.updated_at || d.updated_at || null;
+  return { eventType, eventId, trackingId, partnerRef, rawStatus, description, occurredAt };
 }
 
 /**
@@ -75,7 +83,7 @@ function extractDeliveredAt(payload) {
 // FR : Traite un événement de livraison ShaQ (journalise + maj commande).
 // EN : Process a ShaQ delivery event (log + update order).
 async function handleWebhook(body) {
-  const { trackingId, partnerRef, rawStatus, description, occurredAt } = parsePayload(body);
+  const { eventType, eventId, trackingId, partnerRef, rawStatus, description, occurredAt } = parsePayload(body);
   if (!rawStatus) throw ApiError.badRequest('Statut ShaQ manquant dans le payload');
 
   const mapped = mapShaqStatus(rawStatus);
@@ -102,7 +110,7 @@ async function handleWebhook(body) {
   // term when unknown (capped to the column width) — never a misleading sentinel.
   const eventStatus = mapped || String(rawStatus).trim().toLowerCase().replace(/[\s-]+/g, '_').slice(0, 30);
 
-  await eventRepo.insert({
+  const inserted = await eventRepo.insert({
     orderId: order ? order.id : null,
     trackingId,
     status: eventStatus,
@@ -110,17 +118,31 @@ async function handleWebhook(body) {
     description,
     payload: body,
     occurredAt: occurredAt ? new Date(occurredAt) : null,
+    eventId,
   });
 
+  // Idempotency: ShaQ may re-deliver the same event_id; the insert is skipped on
+  // conflict, so we must not re-apply the update either.
+  if (eventId && !inserted) {
+    return { matchedOrder: order ? order.id : null, mappedStatus: mapped, orderUpdated: false, duplicate: true };
+  }
+
+  // Only a status-change event drives a delivery_status transition. Other events
+  // (e.g. package.amount_to_collect_updated) are logged but never change status.
+  const isStatusEvent = !eventType || eventType === 'package.status_updated';
+
   let updated = false;
-  if (order && mapped && mapped !== order.delivery_status) {
-    // For a delivered transition, stamp the real ShaQ delivery date (from the
-    // tracking history) rather than now(), so lead-time metrics stay accurate.
-    const extra = mapped === 'delivered' ? { deliveredAt: extractDeliveredAt(body) } : {};
+  if (isStatusEvent && order && mapped && mapped !== order.delivery_status) {
+    // For a delivered transition, stamp the REAL delivery date: the tracking
+    // history's delivered step (poll payloads) or the webhook envelope's
+    // occurred_at (push) — never now(), so lead-time metrics stay accurate.
+    const extra = mapped === 'delivered'
+      ? { deliveredAt: extractDeliveredAt(body) || (occurredAt ? new Date(occurredAt) : null) }
+      : {};
     await orderRepo.update(order.id, { deliveryStatus: mapped, ...extra });
     updated = true;
   } else if (!order) {
-    logger.warn(`ShaQ webhook: no order found for tracking ${trackingId}`);
+    logger.warn(`ShaQ webhook: no order found for tracking ${trackingId} / ref ${partnerRef}`);
   } else if (!mapped) {
     logger.warn(`ShaQ webhook: unmapped status "${rawStatus}"`);
   }
