@@ -86,6 +86,9 @@ export function normalizeOrder(row) {
     date: dateOnly(row.ordered_at || row.created_at),
     updatedAt: dateOnly(row.updated_at || row.ordered_at || row.created_at),
     deliveredAt: dateOnly(row.delivered_at),
+    // Raw timestamps (untruncated) for precise duration math.
+    orderedAtRaw: row.ordered_at || row.created_at || null,
+    deliveredAtRaw: row.delivered_at || null,
     notes: row.notes ?? '',
     archived: Boolean(row.archived),
   };

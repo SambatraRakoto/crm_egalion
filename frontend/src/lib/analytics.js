@@ -35,15 +35,15 @@ export function kpis(orders) {
   const returned = orders.filter((o) => o.category === CATEGORY.RETURNS).length;
   const issues = orders.filter((o) => o.category === CATEGORY.ISSUES_EXCEPTIONS).length;
 
-  const deliveredOrders = orders.filter((o) => DELIVERED.includes(o.status));
-  const avgDeliveryDays = deliveredOrders.length
-    ? round2(
-        deliveredOrders.reduce(
-          // Real lead time: delivered date − order date (fallback to updatedAt).
-          (s, o) => s + Math.max(0, (new Date(o.deliveredAt || o.updatedAt) - new Date(o.date)) / 86400000),
-          0,
-        ) / deliveredOrders.length,
-      )
+  // Real lead time: only delivered orders that have BOTH a real delivery
+  // timestamp and an order timestamp. Full-precision (hours kept), negative
+  // anomalies excluded rather than clamped to 0.
+  const leadTimes = orders
+    .filter((o) => DELIVERED.includes(o.status) && (o.deliveredAtRaw || o.deliveredAt) && (o.orderedAtRaw || o.date))
+    .map((o) => (new Date(o.deliveredAtRaw || o.deliveredAt) - new Date(o.orderedAtRaw || o.date)) / 86400000)
+    .filter((d) => d >= 0);
+  const avgDeliveryDays = leadTimes.length
+    ? round2(leadTimes.reduce((s, d) => s + d, 0) / leadTimes.length)
     : 0;
 
   return {
