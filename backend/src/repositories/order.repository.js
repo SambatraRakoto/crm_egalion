@@ -200,9 +200,16 @@ async function update(id, data) {
       params.push(data[key]);
     }
   }
-  // Stamp delivered_at when transitioning to delivered.
+  // Stamp delivered_at when transitioning to delivered. Prefer the real ShaQ
+  // delivery timestamp when the caller provides it; only fall back to now() when
+  // no real date is known (never overwrite a real date with a sync-time stamp).
   if (data.deliveryStatus === 'delivered') {
-    sets.push(`delivered_at = COALESCE(delivered_at, now())`);
+    if (data.deliveredAt) {
+      sets.push(`delivered_at = $${i++}`);
+      params.push(data.deliveredAt instanceof Date ? data.deliveredAt : new Date(data.deliveredAt));
+    } else {
+      sets.push(`delivered_at = COALESCE(delivered_at, now())`);
+    }
   }
   if (!sets.length) return findById(id);
   params.push(id);

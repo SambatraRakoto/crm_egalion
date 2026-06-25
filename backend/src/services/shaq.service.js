@@ -47,6 +47,28 @@ function parsePayload(body) {
 }
 
 /**
+ * Extract the real delivery timestamp from a ShaQ payload's tracking history.
+ * ShaQ payloads carry a `tracking` array of timestamped status steps; the date
+ * of the `delivered` step is the true delivery time (the latest one if several).
+ * Returns a Date, or null when no delivered step with a date is present.
+ */
+// FR : Extrait la vraie date de livraison du tracking ShaQ.
+// EN : Extract the real delivery date from the ShaQ tracking history.
+function extractDeliveredAt(payload) {
+  const d = payload && payload.data ? payload.data : payload;
+  const tracking = (d && (d.tracking || d.trackingHistory)) || [];
+  if (!Array.isArray(tracking)) return null;
+  let latest = null;
+  for (const step of tracking) {
+    if (step && step.name === 'delivered' && step.date) {
+      const d = new Date(step.date);
+      if (!Number.isNaN(d.getTime()) && (!latest || d > latest)) latest = d;
+    }
+  }
+  return latest;
+}
+
+/**
  * Process an inbound ShaQ delivery update: record the event and, when the status
  * maps to a known internal status, update the matching order automatically.
  */
@@ -92,7 +114,10 @@ async function handleWebhook(body) {
 
   let updated = false;
   if (order && mapped && mapped !== order.delivery_status) {
-    await orderRepo.update(order.id, { deliveryStatus: mapped });
+    // For a delivered transition, stamp the real ShaQ delivery date (from the
+    // tracking history) rather than now(), so lead-time metrics stay accurate.
+    const extra = mapped === 'delivered' ? { deliveredAt: extractDeliveredAt(body) } : {};
+    await orderRepo.update(order.id, { deliveryStatus: mapped, ...extra });
     updated = true;
   } else if (!order) {
     logger.warn(`ShaQ webhook: no order found for tracking ${trackingId}`);
@@ -295,7 +320,8 @@ async function syncStatuses({ limit = 1000 } = {}) {
       const mapped = mapShaqStatus(pick(data, 'status'));
       if (!mapped || mapped === o.delivery_status) continue; // no change → no duplicate event
 
-      await orderRepo.update(o.id, { deliveryStatus: mapped });
+      const extra = mapped === 'delivered' ? { deliveredAt: extractDeliveredAt(data) } : {};
+      await orderRepo.update(o.id, { deliveryStatus: mapped, ...extra });
       await eventRepo.insert({
         orderId: o.id,
         trackingId: o.shaq_tracking_id,
@@ -353,4 +379,5 @@ module.exports = {
   importPackages,
   syncStatuses,
   shipPendingOrders,
+  extractDeliveredAt,
 };
