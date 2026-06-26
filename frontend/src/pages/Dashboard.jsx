@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import {
   ShoppingCart, TrendingUp, RotateCcw, Package,
-  DollarSign, Truck, AlertTriangle, Download, X,
+  DollarSign, Truck, AlertTriangle, Download, X, CheckCircle2,
 } from "lucide-react";
 import KpiCard from "../components/crm/KpiCard";
 import { useOrders } from "@/hooks/useOrders";
@@ -232,17 +232,14 @@ export default function Dashboard({ currency }) {
         </button>
       </div>
 
-      {/* KPI Row 1 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      {/* KPI Grid — 11 cards in one fluid grid (xl: 4/4/3, 2xl: 6/5) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
+        <KpiCard title="Delivery Rate" value={`${Number(kpis.deliveryRate || 0).toFixed(2)}%`} sub="Delivered / total orders" icon={CheckCircle2} accent="emerald" />
         <KpiCard title="Total Orders" value={totalOrdersInPeriod.toLocaleString()} sub={`${periodLabel}`} icon={ShoppingCart} accent="indigo" trend={0} trendLabel="vs last mo." />
         <KpiCard title="Revenue" value={currency === "GHS" ? `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub={currency === "GHS" ? `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD` : `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })} GHS`} icon={TrendingUp} accent="emerald" trend={0} trendLabel="vs last mo." />
         <KpiCard title="Avg. Order Value" value={currency === "GHS" ? `₵${avgOrder.ghs.toLocaleString()}` : `$${avgOrder.usd.toLocaleString()}`} sub="Per transaction" icon={Package} accent="amber" />
         <KpiCard title="Total Logistics" value={currency === "GHS" ? `₵${totalLogistics.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${totalLogistics.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="Delivery costs" icon={Truck} accent="sky" />
         <KpiCard title="ShaQ Commission" value={currency === "GHS" ? `₵${commissionShaq.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${commissionShaq.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="5% of order value" icon={DollarSign} accent="violet" />
-      </div>
-
-      {/* KPI Row 2 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <KpiCard title="Avg. Delivery Time" value={`${kpis.avgDeliveryTime}d`} sub="Days to deliver" icon={Truck} accent="sky" />
         <KpiCard title="Net Margin" value={`${kpis.netMargin}%`} sub="After ShaQ costs" icon={TrendingUp} accent="emerald" trend={0} trendLabel="vs last mo." />
         <KpiCard title="Basket Size" value={`${kpis.basketSize} items`} sub="Avg. per order" icon={Package} accent="amber" />

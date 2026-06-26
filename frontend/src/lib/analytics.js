@@ -25,6 +25,13 @@ const monthLabel = (key) => {
 // EN : Compute the key KPIs (revenue, logistics, margin, rates) for a set of orders.
 export function kpis(orders) {
   const count = orders.length;
+  // Revenue (CA) is summed from the NATIVE GHS amounts (order_amount = Shopify
+  // total_price), so the displayed GHS total matches Shopify exactly. Summing the
+  // per-order USD values (each rounded to 2 decimals) and converting back to GHS
+  // introduced a cumulative rounding drift — that round-trip is avoided here.
+  // USD stays derived from the per-order USD values (USD is a secondary display;
+  // the shop currency is GHS).
+  const revenueGhs = orders.reduce((s, o) => s + (o.amountGHS ?? 0), 0);
   const revenueUsd = orders.reduce((s, o) => s + o.amountUSD, 0);
   const logisticsUsd = orders.reduce((s, o) => s + o.deliveryCostUSD, 0);
   // Commission ShaQ = 5% of order amount (dynamic, never read from the dead
@@ -48,7 +55,7 @@ export function kpis(orders) {
 
   return {
     totalOrders: count,
-    revenue: { usd: round2(revenueUsd), ghs: ghs(revenueUsd) },
+    revenue: { usd: round2(revenueUsd), ghs: round2(revenueGhs) },
     totalLogistics: { usd: round2(logisticsUsd), ghs: ghs(logisticsUsd) },
     commissionShaq: { usd: commissionUsd, ghs: ghs(commissionUsd) },
     totalShaq: { usd: shaqFeesUsd, ghs: ghs(shaqFeesUsd) },
