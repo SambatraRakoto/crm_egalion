@@ -164,6 +164,34 @@ export function bestSellingProducts(orders, limit = 8) {
   return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, limit);
 }
 
+// FR : Taux de livraison (%) par produit — part des commandes contenant le
+// produit qui sont livrées. Trié par volume (produits les plus présents).
+// EN : Delivery rate (%) per product — share of orders containing the product
+// that are delivered. Sorted by volume (most-present products first).
+export function deliveryRateByProduct(orders, limit = 8) {
+  const map = {};
+  orders.forEach((o) => {
+    const names = Array.isArray(o.items) && o.items.length
+      ? [...new Set(o.items.map((it) => it.name).filter(Boolean))]
+      : (o.product ? [o.product] : []);
+    const isDelivered = DELIVERED.includes(o.status);
+    names.forEach((n) => {
+      if (!map[n]) map[n] = { total: 0, delivered: 0 };
+      map[n].total += 1;
+      if (isDelivered) map[n].delivered += 1;
+    });
+  });
+  return Object.entries(map)
+    .map(([product, v]) => ({
+      product,
+      total: v.total,
+      delivered: v.delivered,
+      rate: round2((v.delivered / v.total) * 100),
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit);
+}
+
 // FR : Régions avec le plus de commandes (top N). EN : Regions with the most orders (top N).
 export function topRegions(orders, limit = 8) {
   const map = bucketCount(orders, (o) => o.region);

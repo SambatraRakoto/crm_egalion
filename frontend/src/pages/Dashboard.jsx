@@ -95,6 +95,7 @@ export default function Dashboard({ currency }) {
       ordersByDate: analytics.ordersByDate(active),
       revenueByMonth: analytics.revenueByMonth(active),
       bestSellingProducts: analytics.bestSellingProducts(scoped),
+      deliveryRateByProduct: analytics.deliveryRateByProduct(scoped),
       topRegions: analytics.topRegions(scoped),
       regionRevenue: analytics.regionRevenue(scoped),
       statusDistribution: analytics.statusDistribution(scoped),
@@ -108,7 +109,7 @@ export default function Dashboard({ currency }) {
 
   const {
     kpis, ordersByMonth: byMonth, ordersByWeek: byWeek, ordersByDate: byDate,
-    revenueByMonth: revByMonth, bestSellingProducts: products, topRegions: regions,
+    revenueByMonth: revByMonth, bestSellingProducts: products, deliveryRateByProduct: delRateProd, topRegions: regions,
     regionRevenue: regionRevData, statusDistribution: statusDist, deliveryFunnel: funnel,
     cancellationByRegion: cancByRegion, totalOrdersInPeriod, usdToGhs,
   } = data;
@@ -141,6 +142,33 @@ export default function Dashboard({ currency }) {
   const productsChartData = {
     labels: products.map(([p]) => p.length > 20 ? p.slice(0, 20) + "…" : p),
     datasets: [{ label: "Orders", data: products.map(([, c]) => c), backgroundColor: [CHART_COLORS.indigo, CHART_COLORS.emerald, CHART_COLORS.amber, CHART_COLORS.rose, CHART_COLORS.violet, CHART_COLORS.sky, "rgba(249,115,22,0.85)", "rgba(20,184,166,0.85)"], borderRadius: 6, borderSkipped: false }],
+  };
+
+  // Delivery rate (%) per product — bars colored by rate (green/amber/rose).
+  const deliveryRateChartData = {
+    labels: delRateProd.map((r) => (r.product.length > 20 ? r.product.slice(0, 20) + "…" : r.product)),
+    datasets: [{
+      label: "Delivery rate",
+      data: delRateProd.map((r) => r.rate),
+      backgroundColor: delRateProd.map((r) => (r.rate >= 80 ? CHART_COLORS.emerald : r.rate >= 50 ? CHART_COLORS.amber : CHART_COLORS.rose)),
+      borderRadius: 6,
+      borderSkipped: false,
+    }],
+  };
+
+  const deliveryRateOpts = {
+    ...hBarOpts,
+    scales: {
+      x: { min: 0, max: 100, grid: { color: "#f1f5f9" }, ticks: { color: "#94a3b8", font: { size: 11 }, callback: (v) => `${v}%` } },
+      y: { grid: { display: false }, ticks: { color: "#475569", font: { size: 11 } } },
+    },
+    plugins: {
+      ...hBarOpts.plugins,
+      tooltip: {
+        ...hBarOpts.plugins.tooltip,
+        callbacks: { label: (ctx) => { const r = delRateProd[ctx.dataIndex]; return ` ${r.rate}% (${r.delivered}/${r.total} livrées)`; } },
+      },
+    },
   };
 
   const regionsChartData = {
@@ -317,6 +345,13 @@ export default function Dashboard({ currency }) {
           <p className="text-xs text-slate-400 mb-4">Ghanaian regions</p>
           <div className="h-56"><Bar data={regionsChartData} options={hBarOpts} /></div>
         </div>
+      </div>
+
+      {/* Delivery Rate by Product */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <h2 className="text-sm font-semibold text-slate-800 mb-1">Delivery Rate by Product</h2>
+        <p className="text-xs text-slate-400 mb-4">% of orders delivered, per product (by volume)</p>
+        <div className="h-64"><Bar data={deliveryRateChartData} options={deliveryRateOpts} /></div>
       </div>
 
       {/* Status Donut + Breakdown */}
