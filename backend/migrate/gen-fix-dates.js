@@ -43,7 +43,7 @@ function main() {
   for (const r of rows.slice(h + 1)) {
     const name = r[iName]; const date = r[iDate];
     if (!name || !date) continue;
-    const num = numOf(name); if (num == null) return;
+    const num = numOf(name); if (num == null) continue;
     if (!byNum.has(num)) byNum.set(num, toTs(date));
   }
 
