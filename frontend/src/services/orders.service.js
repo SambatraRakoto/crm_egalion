@@ -70,6 +70,8 @@ export function normalizeOrder(row) {
     region: row.region ?? '',
     product: firstName,
     quantity,
+    // Total units across all line items (for multi-product orders).
+    totalQuantity: Number(row.total_quantity ?? quantity ?? 0),
     unitPriceGHS: unitPriceGhs,
     unitPriceUSD: ghsToUsd(unitPriceGhs),
     items,

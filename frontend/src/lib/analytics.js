@@ -54,6 +54,16 @@ export function kpis(orders) {
     ? round2(leadTimes.reduce((s, d) => s + d, 0) / leadTimes.length)
     : 0;
 
+  // Real basket size: average units per order across ALL line items
+  // (multi-product orders fully counted; falls back to totalQuantity/quantity
+  // for rows without itemized lines, e.g. mock/legacy data).
+  const totalUnits = orders.reduce((s, o) => {
+    if (Array.isArray(o.items) && o.items.length) {
+      return s + o.items.reduce((q, it) => q + (Number(it.quantity) || 0), 0);
+    }
+    return s + (Number(o.totalQuantity ?? o.quantity) || 0);
+  }, 0);
+
   return {
     totalOrders: count,
     revenue: { usd: round2(revenueUsd), ghs: round2(revenueGhs) },
@@ -66,7 +76,7 @@ export function kpis(orders) {
       ? { usd: round2(revenueUsd / count), ghs: round2(revenueGhs / count) }
       : { usd: 0, ghs: 0 },
     avgDeliveryTime: avgDeliveryDays,
-    basketSize: 1.8,
+    basketSize: count ? round2(totalUnits / count) : 0,
     deliveryRate: count ? ((delivered / count) * 100).toFixed(1) : '0.0',
     returnRate: count ? ((returned / count) * 100).toFixed(1) : '0.0',
     cancellationRate: count ? ((issues / count) * 100).toFixed(1) : '0.0',
@@ -125,9 +135,19 @@ export function revenueByMonth(orders) {
   };
 }
 
-// FR : Produits les plus commandés (top N). EN : Best-selling products (top N).
+// FR : Produits les plus commandés (top N) — compte chaque produit présent dans
+// la commande (multi-produits inclus), pas seulement le premier article.
+// EN : Best-selling products (top N) — counts every product in the order
+// (multi-product orders included), not just the first line item.
 export function bestSellingProducts(orders, limit = 8) {
-  const map = bucketCount(orders, (o) => o.product);
+  const map = {};
+  orders.forEach((o) => {
+    // Distinct product names in the order: count one "order volume" per product.
+    const names = Array.isArray(o.items) && o.items.length
+      ? [...new Set(o.items.map((it) => it.name).filter(Boolean))]
+      : (o.product ? [o.product] : []);
+    names.forEach((n) => { map[n] = (map[n] || 0) + 1; });
+  });
   return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, limit);
 }
 

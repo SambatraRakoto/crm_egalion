@@ -430,9 +430,20 @@ export default function Orders({ currency }) {
                         {order.region || "—"}
                       </span>
                     </td>
-                    {/* Product */}
+                    {/* Product (first line item + "+N" when multi-product) */}
                     <td className="px-3 py-3.5 max-w-[180px]">
-                      <span className="text-xs text-slate-600 truncate block" title={order.product}>{order.product || "—"}</span>
+                      {(() => {
+                        const extra = (Array.isArray(order.items) ? order.items.length : 1) - 1;
+                        const allNames = Array.isArray(order.items) && order.items.length
+                          ? order.items.map((it) => it.name).filter(Boolean).join(", ")
+                          : order.product;
+                        return (
+                          <span className="text-xs text-slate-600 truncate block" title={allNames || order.product}>
+                            {order.product || "—"}
+                            {extra > 0 && <span className="ml-1 text-indigo-600 font-medium">+{extra}</span>}
+                          </span>
+                        );
+                      })()}
                     </td>
                     {/* Quantity */}
                     <td className="px-3 py-3.5 text-right text-xs text-slate-700 font-medium whitespace-nowrap">{d.quantity || "—"}</td>

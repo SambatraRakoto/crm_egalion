@@ -329,14 +329,20 @@ async function list(opts) {
   let i = nextIndex;
 
   const totalRes = await query(`SELECT COUNT(*)::int AS n FROM orders ${whereSql}`, params);
-  // Enrich each row with its first line item (product / quantity / unit price)
-  // and the total quantity, so the Orders table can show them without N+1 calls.
+  // Enrich each row with its first line item (product / quantity / unit price),
+  // the total quantity, and the FULL list of line items (so multi-product orders
+  // are handled everywhere without N+1 calls).
   const rowsRes = await query(
     `SELECT ${COLUMNS},
        fi.product_name AS first_product,
        fi.quantity     AS first_quantity,
        fi.unit_price   AS first_unit_price,
-       (SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE order_id = orders.id) AS total_quantity
+       (SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE order_id = orders.id) AS total_quantity,
+       (SELECT COALESCE(json_agg(json_build_object(
+                 'id', oi.id, 'product_id', oi.product_id, 'product_name', oi.product_name,
+                 'sku', oi.sku, 'quantity', oi.quantity, 'unit_price', oi.unit_price
+               ) ORDER BY oi.created_at), '[]'::json)
+          FROM order_items oi WHERE oi.order_id = orders.id) AS items
      FROM orders
      LEFT JOIN LATERAL (
        SELECT product_name, quantity, unit_price
