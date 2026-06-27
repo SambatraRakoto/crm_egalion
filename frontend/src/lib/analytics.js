@@ -30,7 +30,8 @@ export function kpis(orders) {
   // per-order USD values (each rounded to 2 decimals) and converting back to GHS
   // introduced a cumulative rounding drift — that round-trip is avoided here.
   // USD stays derived from the per-order USD values (USD is a secondary display;
-  // the shop currency is GHS).
+  // the shop currency is GHS). All placed orders are counted (parity with Shopify
+  // total sales): ShaQ delivery returns/cancellations are NOT Shopify refunds.
   const revenueGhs = orders.reduce((s, o) => s + (o.amountGHS ?? 0), 0);
   const revenueUsd = orders.reduce((s, o) => s + o.amountUSD, 0);
   const logisticsUsd = orders.reduce((s, o) => s + o.deliveryCostUSD, 0);
