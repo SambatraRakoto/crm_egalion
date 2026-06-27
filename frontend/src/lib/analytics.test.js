@@ -65,3 +65,25 @@ describe('kpis().avgDeliveryTime — real delivery lead time', () => {
     expect(avg([])).toBe(0);
   });
 });
+
+describe('kpis() — AOV & Basket Size: leads vs delivered perimeters', () => {
+  const orders = [
+    mkOrder({ status: 'Delivered', amountGHS: 300, items: [{ name: 'A', quantity: 1 }, { name: 'B', quantity: 1 }] }),
+    mkOrder({ status: 'Delivered', amountGHS: 200, items: [{ name: 'A', quantity: 1 }] }),
+    mkOrder({ status: 'Pending', amountGHS: 100, items: [{ name: 'A', quantity: 1 }] }),
+  ];
+  const k = kpis(orders);
+
+  it('AOV (all leads) = total GHS / all orders', () => {
+    expect(k.avgOrderValue.ghs).toBe(200); // 600 / 3
+  });
+  it('AOV (delivered) = delivered GHS / delivered orders', () => {
+    expect(k.avgOrderValueDelivered.ghs).toBe(250); // 500 / 2
+  });
+  it('Basket size (all leads) = all units / all orders', () => {
+    expect(k.basketSize).toBe(1.33); // 4 / 3
+  });
+  it('Basket size (delivered) = delivered units / delivered orders', () => {
+    expect(k.basketSizeDelivered).toBe(1.5); // 3 / 2
+  });
+});

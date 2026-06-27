@@ -122,6 +122,9 @@ export default function Dashboard({ currency }) {
   const totalLogistics = kpis.totalLogistics;
   const commissionShaq = kpis.commissionShaq;
   const avgOrder = kpis.avgOrderValue;
+  // Delivered-only perimeter (shown as a sub-line; leads stays primary = Shopify).
+  const avgOrderDelivered = kpis.avgOrderValueDelivered || { ghs: 0, usd: 0 };
+  const basketDelivered = kpis.basketSizeDelivered ?? 0;
 
   const trendData = trendView === "month" ? byMonth : trendView === "week" ? byWeek : byDate;
 
@@ -237,12 +240,12 @@ export default function Dashboard({ currency }) {
         <KpiCard title="Delivery Rate" value={`${Number(kpis.deliveryRate || 0).toFixed(2)}%`} sub="Delivered / total orders" icon={CheckCircle2} accent="emerald" />
         <KpiCard title="Total Orders" value={totalOrdersInPeriod.toLocaleString()} sub={`${periodLabel}`} icon={ShoppingCart} accent="indigo" trend={0} trendLabel="vs last mo." />
         <KpiCard title="Revenue" value={currency === "GHS" ? `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub={currency === "GHS" ? `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD` : `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })} GHS`} icon={TrendingUp} accent="emerald" trend={0} trendLabel="vs last mo." />
-        <KpiCard title="Avg. Order Value" value={currency === "GHS" ? `₵${avgOrder.ghs.toLocaleString()}` : `$${avgOrder.usd.toLocaleString()}`} sub="Per transaction" icon={Package} accent="amber" />
+        <KpiCard title="Avg. Order Value (all)" value={currency === "GHS" ? `₵${avgOrder.ghs.toLocaleString()}` : `$${avgOrder.usd.toLocaleString()}`} sub={currency === "GHS" ? `Delivered: ₵${avgOrderDelivered.ghs.toLocaleString()}` : `Delivered: $${avgOrderDelivered.usd.toLocaleString()}`} icon={Package} accent="amber" />
         <KpiCard title="Total Logistics" value={currency === "GHS" ? `₵${totalLogistics.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${totalLogistics.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="Delivery costs" icon={Truck} accent="sky" />
         <KpiCard title="ShaQ Commission" value={currency === "GHS" ? `₵${commissionShaq.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${commissionShaq.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="5% of order value" icon={DollarSign} accent="violet" />
         <KpiCard title="Avg. Delivery Time" value={`${kpis.avgDeliveryTime}d`} sub="Days to deliver" icon={Truck} accent="sky" />
         <KpiCard title="Net Margin" value={`${kpis.netMargin}%`} sub="After ShaQ costs" icon={TrendingUp} accent="emerald" trend={0} trendLabel="vs last mo." />
-        <KpiCard title="Basket Size" value={`${kpis.basketSize} items`} sub="Avg. per order" icon={Package} accent="amber" />
+        <KpiCard title="Basket Size (all)" value={`${kpis.basketSize} items`} sub={`Delivered: ${basketDelivered} items`} icon={Package} accent="amber" />
         <KpiCard title="Cancellation Rate" value={`${kpis.cancellationRate}%`} sub="Issues & exceptions" icon={AlertTriangle} accent="rose" />
         <KpiCard title="Return Rate" value={`${kpis.returnRate}%`} sub="Orders returned" icon={RotateCcw} accent="rose" trend={0} trendLabel="vs last mo." />
       </div>

@@ -39,7 +39,8 @@ export function kpis(orders) {
   // shaq_cost column). Total ShaQ fees = delivery fee + commission.
   const commissionUsd = round2(revenueUsd * 0.05);
   const shaqFeesUsd = round2(logisticsUsd + commissionUsd);
-  const delivered = orders.filter((o) => DELIVERED.includes(o.status)).length;
+  const deliveredOrders = orders.filter((o) => DELIVERED.includes(o.status));
+  const delivered = deliveredOrders.length;
   const returned = orders.filter((o) => o.category === CATEGORY.RETURNS).length;
   const issues = orders.filter((o) => o.category === CATEGORY.ISSUES_EXCEPTIONS).length;
 
@@ -54,15 +55,20 @@ export function kpis(orders) {
     ? round2(leadTimes.reduce((s, d) => s + d, 0) / leadTimes.length)
     : 0;
 
-  // Real basket size: average units per order across ALL line items
-  // (multi-product orders fully counted; falls back to totalQuantity/quantity
-  // for rows without itemized lines, e.g. mock/legacy data).
-  const totalUnits = orders.reduce((s, o) => {
-    if (Array.isArray(o.items) && o.items.length) {
-      return s + o.items.reduce((q, it) => q + (Number(it.quantity) || 0), 0);
-    }
-    return s + (Number(o.totalQuantity ?? o.quantity) || 0);
-  }, 0);
+  // Units per order across ALL line items (multi-product orders fully counted;
+  // falls back to totalQuantity/quantity for rows without itemized lines).
+  const unitsOf = (o) => (Array.isArray(o.items) && o.items.length
+    ? o.items.reduce((q, it) => q + (Number(it.quantity) || 0), 0)
+    : (Number(o.totalQuantity ?? o.quantity) || 0));
+  const totalUnits = orders.reduce((s, o) => s + unitsOf(o), 0);
+
+  // Delivered-only perimeter (real fulfilled orders). Shown alongside the
+  // all-leads figures so each KPI states its population explicitly. The leads
+  // (all orders) figures stay primary — they match Shopify "Total sales" AOV.
+  const dCount = deliveredOrders.length;
+  const dRevenueGhs = deliveredOrders.reduce((s, o) => s + (o.amountGHS ?? 0), 0);
+  const dRevenueUsd = deliveredOrders.reduce((s, o) => s + o.amountUSD, 0);
+  const dUnits = deliveredOrders.reduce((s, o) => s + unitsOf(o), 0);
 
   return {
     totalOrders: count,
@@ -77,6 +83,13 @@ export function kpis(orders) {
       : { usd: 0, ghs: 0 },
     avgDeliveryTime: avgDeliveryDays,
     basketSize: count ? round2(totalUnits / count) : 0,
+    // Delivered-only perimeter (explicit population). Leads figures above stay
+    // primary (Shopify parity); these describe real fulfilled orders.
+    deliveredOrders: dCount,
+    avgOrderValueDelivered: dCount
+      ? { usd: round2(dRevenueUsd / dCount), ghs: round2(dRevenueGhs / dCount) }
+      : { usd: 0, ghs: 0 },
+    basketSizeDelivered: dCount ? round2(dUnits / dCount) : 0,
     deliveryRate: count ? ((delivered / count) * 100).toFixed(1) : '0.0',
     returnRate: count ? ((returned / count) * 100).toFixed(1) : '0.0',
     cancellationRate: count ? ((issues / count) * 100).toFixed(1) : '0.0',
