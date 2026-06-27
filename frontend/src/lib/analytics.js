@@ -60,8 +60,10 @@ export function kpis(orders) {
     totalLogistics: { usd: round2(logisticsUsd), ghs: ghs(logisticsUsd) },
     commissionShaq: { usd: commissionUsd, ghs: ghs(commissionUsd) },
     totalShaq: { usd: shaqFeesUsd, ghs: ghs(shaqFeesUsd) },
+    // Avg. order value (panier moyen): GHS from the NATIVE GHS revenue ÷ count
+    // (= Revenue GHS ÷ orders, parity with Shopify AOV), not the USD round-trip.
     avgOrderValue: count
-      ? { usd: round2(revenueUsd / count), ghs: ghs(revenueUsd / count) }
+      ? { usd: round2(revenueUsd / count), ghs: round2(revenueGhs / count) }
       : { usd: 0, ghs: 0 },
     avgDeliveryTime: avgDeliveryDays,
     basketSize: 1.8,
