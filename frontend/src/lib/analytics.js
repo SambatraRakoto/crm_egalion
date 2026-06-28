@@ -192,23 +192,36 @@ export function deliveryRateByProduct(orders, limit = 8) {
     .slice(0, limit);
 }
 
-// FR : Régions avec le plus de commandes (top N). EN : Regions with the most orders (top N).
+// FR : Régions avec le plus de commandes (top N). Tri par commandes puis nom
+// (départage déterministe → classement stable même en bas). Région vide = Inconnu.
+// EN : Top regions by order count, with a deterministic name tie-break and empty
+// regions grouped as "Inconnu" (stable ranking, including the lower ranks).
 export function topRegions(orders, limit = 8) {
-  const map = bucketCount(orders, (o) => o.region);
-  return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, limit);
+  const map = {};
+  orders.forEach((o) => {
+    const r = (o.region && String(o.region).trim()) || 'Inconnu';
+    map[r] = (map[r] || 0) + 1;
+  });
+  return Object.entries(map)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit);
 }
 
-// FR : Commandes et CA par région (top N). EN : Orders and revenue per region (top N).
+// FR : Commandes et CA par région (top N), trié PAR REVENU (conforme au libellé
+// « by revenue »), départage déterministe par nom, région vide = Inconnu.
+// EN : Orders and revenue per region (top N), sorted BY REVENUE (matching the
+// "by revenue" label), deterministic name tie-break, empty region = "Inconnu".
 export function regionRevenue(orders, limit = 10) {
   const map = {};
   orders.forEach((o) => {
-    if (!map[o.region]) map[o.region] = { orders: 0, revenueUSD: 0 };
-    map[o.region].orders++;
-    map[o.region].revenueUSD += o.amountUSD;
+    const r = (o.region && String(o.region).trim()) || 'Inconnu';
+    if (!map[r]) map[r] = { orders: 0, revenueUSD: 0 };
+    map[r].orders++;
+    map[r].revenueUSD += o.amountUSD;
   });
   return Object.entries(map)
     .map(([region, v]) => ({ region, orders: v.orders, revenueUSD: round2(v.revenueUSD) }))
-    .sort((a, b) => b.orders - a.orders)
+    .sort((a, b) => b.revenueUSD - a.revenueUSD || a.region.localeCompare(b.region))
     .slice(0, limit);
 }
 

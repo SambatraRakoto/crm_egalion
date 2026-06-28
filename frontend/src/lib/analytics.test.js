@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { kpis } from '@/lib/analytics';
+import { kpis, topRegions, regionRevenue } from '@/lib/analytics';
 
 // Minimal valid order; override only what each case needs. status 'Delivered'
 // is the single value in DELIVERED_LABELS, so these count as delivered.
@@ -85,5 +85,47 @@ describe('kpis() — AOV & Basket Size: leads vs delivered perimeters', () => {
   });
   it('Basket size (delivered) = delivered units / delivered orders', () => {
     expect(k.basketSizeDelivered).toBe(1.5); // 3 / 2
+  });
+});
+
+describe('topRegions — deterministic ranking (C.11)', () => {
+  it('sorts by order count desc, breaks ties by name, groups empty as "Inconnu"', () => {
+    const orders = [
+      { region: 'Ashanti' }, { region: 'Ashanti' }, // 2
+      { region: '' }, { region: null },             // 2 -> Inconnu
+      { region: 'Volta' },                          // 1
+      { region: 'Bono' },                           // 1
+    ];
+    expect(topRegions(orders)).toEqual([
+      ['Ashanti', 2], ['Inconnu', 2], // tie at 2 -> name A→I
+      ['Bono', 1], ['Volta', 1],      // tie at 1 -> name B→V
+    ]);
+  });
+
+  it('respects the limit', () => {
+    const orders = [{ region: 'A' }, { region: 'B' }, { region: 'C' }];
+    expect(topRegions(orders, 2)).toHaveLength(2);
+  });
+});
+
+describe('regionRevenue — sorted by revenue, not order count (C.12)', () => {
+  const orders = [
+    { region: 'A', amountUSD: 10 },                                  // 1 order, rev 10
+    { region: 'B', amountUSD: 4 }, { region: 'B', amountUSD: 4 },    // 2 orders, rev 8
+    { region: 'Zeta', amountUSD: 5 }, { region: 'Alpha', amountUSD: 5 }, // tie rev 5
+    { region: '', amountUSD: 3 },                                    // Inconnu
+  ];
+  const res = regionRevenue(orders);
+
+  it('ranks higher-revenue region above a region with more orders', () => {
+    expect(res[0]).toEqual({ region: 'A', orders: 1, revenueUSD: 10 });
+    expect(res[1]).toEqual({ region: 'B', orders: 2, revenueUSD: 8 });
+  });
+  it('breaks revenue ties by name (Alpha before Zeta)', () => {
+    const names = res.map((r) => r.region);
+    expect(names.indexOf('Alpha')).toBeLessThan(names.indexOf('Zeta'));
+  });
+  it('groups empty region as "Inconnu"', () => {
+    expect(res.some((r) => r.region === 'Inconnu')).toBe(true);
   });
 });
