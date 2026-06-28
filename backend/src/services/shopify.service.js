@@ -128,7 +128,11 @@ function mapOrder(o) {
     region,
     city: ship.city || null,
     deliveryAddress: [ship.address1, ship.address2].filter(Boolean).join(', ') || null,
-    orderAmount: o.total_price ? Number(o.total_price) : 0,
+    // Net of refunds: current_total_price reflects refunds/edits, so order_amount
+    // matches Shopify "Total sales". Falls back to total_price (unrefunded / older
+    // payloads). A fully-refunded order yields 0; the Shopify upsert writes it
+    // directly so the refund is reflected (orders/updated fires on refund).
+    orderAmount: Number(o.current_total_price ?? o.total_price ?? 0) || 0,
     deliveryCost,
     items,
     paymentMethod: (o.payment_gateway_names && o.payment_gateway_names[0]) || o.financial_status || null,
