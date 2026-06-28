@@ -68,8 +68,11 @@ const config = {
     apiVersion: process.env.SHOPIFY_API_VERSION || '2024-10',
     webhookSecret: process.env.SHOPIFY_WEBHOOK_SECRET || '',
     // Safety-net reconcile: periodically re-pull recent Shopify orders and upsert
-    // (idempotent) to catch any missed orders/create webhook. Minutes (0 disables).
-    reconcileIntervalMinutes: Number(process.env.SHOPIFY_RECONCILE_MINUTES || 30),
+    // to catch any missed orders/create webhook. OFF by default (opt-in): when on,
+    // it re-asserts Shopify as the source of truth for customer/region/address/
+    // amount on recent orders (would revert manual CRM edits to those fields).
+    // delivery_status / dates / tracking are never touched. Minutes (0 disables).
+    reconcileIntervalMinutes: Number(process.env.SHOPIFY_RECONCILE_MINUTES || 0),
   },
 
   shaq: {
