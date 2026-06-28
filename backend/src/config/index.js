@@ -67,6 +67,9 @@ const config = {
     accessToken: process.env.SHOPIFY_ACCESS_TOKEN || '',
     apiVersion: process.env.SHOPIFY_API_VERSION || '2024-10',
     webhookSecret: process.env.SHOPIFY_WEBHOOK_SECRET || '',
+    // Safety-net reconcile: periodically re-pull recent Shopify orders and upsert
+    // (idempotent) to catch any missed orders/create webhook. Minutes (0 disables).
+    reconcileIntervalMinutes: Number(process.env.SHOPIFY_RECONCILE_MINUTES || 30),
   },
 
   shaq: {
