@@ -89,6 +89,7 @@ export function kpis(orders) {
     // Delivered-only perimeter (explicit population). Leads figures above stay
     // primary (Shopify parity); these describe real fulfilled orders.
     deliveredOrders: dCount,
+    deliveredRevenue: { usd: round2(dRevenueUsd), ghs: round2(dRevenueGhs) },
     avgOrderValueDelivered: dCount
       ? { usd: round2(dRevenueUsd / dCount), ghs: round2(dRevenueGhs / dCount) }
       : { usd: 0, ghs: 0 },
@@ -164,7 +165,7 @@ export function bestSellingProducts(orders, limit = 8) {
       : (o.product ? [o.product] : []);
     names.forEach((n) => { map[n] = (map[n] || 0) + 1; });
   });
-  return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, limit);
+  return Object.entries(map).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit);
 }
 
 // FR : Taux de livraison (%) par produit — part des commandes contenant le
@@ -191,7 +192,7 @@ export function deliveryRateByProduct(orders, limit = 8) {
       delivered: v.delivered,
       rate: round2((v.delivered / v.total) * 100),
     }))
-    .sort((a, b) => b.total - a.total)
+    .sort((a, b) => b.total - a.total || a.product.localeCompare(b.product))
     .slice(0, limit);
 }
 
@@ -270,7 +271,7 @@ export function cancellationByRegion(orders, limit = 10) {
       total: v.total,
       cancelled: v.cancelled,
     }))
-    .sort((a, b) => b.rate - a.rate)
+    .sort((a, b) => b.rate - a.rate || a.region.localeCompare(b.region))
     .slice(0, limit);
 }
 

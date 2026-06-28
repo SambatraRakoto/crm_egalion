@@ -120,6 +120,7 @@ export default function Dashboard({ currency }) {
   const donutTotal = statusDist.reduce((s, x) => s + x.count, 0) || 1;
 
   const totalRev = kpis.revenue;
+  const deliveredRev = kpis.deliveredRevenue || { ghs: 0, usd: 0 };
   const totalLogistics = kpis.totalLogistics;
   const commissionShaq = kpis.commissionShaq;
   const avgOrder = kpis.avgOrderValue;
@@ -268,6 +269,7 @@ export default function Dashboard({ currency }) {
         <KpiCard title="Delivery Rate" value={`${Number(kpis.deliveryRate || 0).toFixed(2)}%`} sub="Delivered / total orders" icon={CheckCircle2} accent="emerald" />
         <KpiCard title="Total Orders" value={totalOrdersInPeriod.toLocaleString()} sub={`${periodLabel}`} icon={ShoppingCart} accent="indigo" trend={0} trendLabel="vs last mo." />
         <KpiCard title="Revenue" value={currency === "GHS" ? `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub={currency === "GHS" ? `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD` : `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })} GHS`} icon={TrendingUp} accent="emerald" trend={0} trendLabel="vs last mo." />
+        <KpiCard title="Delivered Revenue" value={currency === "GHS" ? `₵${deliveredRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${deliveredRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="Collected on delivered orders" icon={TrendingUp} accent="emerald" />
         <KpiCard title="Avg. Order Value (all)" value={currency === "GHS" ? `₵${avgOrder.ghs.toLocaleString()}` : `$${avgOrder.usd.toLocaleString()}`} sub={currency === "GHS" ? `Delivered: ₵${avgOrderDelivered.ghs.toLocaleString()}` : `Delivered: $${avgOrderDelivered.usd.toLocaleString()}`} icon={Package} accent="amber" />
         <KpiCard title="Total Logistics" value={currency === "GHS" ? `₵${totalLogistics.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${totalLogistics.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="Delivery costs" icon={Truck} accent="sky" />
         <KpiCard title="ShaQ Commission" value={currency === "GHS" ? `₵${commissionShaq.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${commissionShaq.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="5% of delivered value" icon={DollarSign} accent="violet" />

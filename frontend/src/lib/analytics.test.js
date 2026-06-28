@@ -90,6 +90,9 @@ describe('kpis() — AOV & Basket Size: leads vs delivered perimeters', () => {
     // delivered USD = 100 + 100 = 200 -> 5% = 10 (all-leads would be 15)
     expect(k.commissionShaq.usd).toBe(10);
   });
+  it('Delivered Revenue = sum of delivered native GHS', () => {
+    expect(k.deliveredRevenue.ghs).toBe(500); // 300 + 200
+  });
 });
 
 describe('topRegions — deterministic ranking (C.11)', () => {
