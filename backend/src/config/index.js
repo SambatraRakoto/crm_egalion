@@ -90,6 +90,10 @@ const config = {
     destCountryIso2: process.env.SHAQ_DEST_COUNTRY || 'GH',
     // Prefix for our order references == ShaQ partner_ref (dedup key).
     orderRefPrefix: process.env.SHAQ_ORDER_PREFIX || '#NA-',
+    // Optional cancel endpoint. Empty = no programmatic cancel (a warning is
+    // logged for manual cancellation). Use ':ref' as the partner_ref placeholder,
+    // e.g. SHAQ_CANCEL_PATH='/packages/:ref/cancel'.
+    cancelPath: process.env.SHAQ_CANCEL_PATH || '',
     // Auto-ship: every Shopify order received is sent to ShaQ automatically.
     // Default ON when credentials are set; can be forced via SHAQ_AUTO_SHIP.
     autoShip: process.env.SHAQ_AUTO_SHIP

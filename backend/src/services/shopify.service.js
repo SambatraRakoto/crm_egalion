@@ -288,6 +288,13 @@ async function handleOrderCancelled(payload) {
   await shopifyRepo.upsertOrder(mapped);
   await shopifyRepo.setOrderDeliveryByShopifyId(mapped.shopifyOrderId, { status: 'cancelled' });
   logger.info(`Shopify webhook: order ${mapped.shopifyOrderId} cancelled`);
+  // Best-effort: cancel the ShaQ package too (no-op + warning if not shipped or
+  // SHAQ_CANCEL_PATH not configured). Never fails the webhook.
+  try {
+    await require('./shaq.service').cancelShipment(mapped.orderNumber);
+  } catch (err) {
+    logger.warn(`ShaQ cancel (cancelled webhook) failed: ${err && err.message ? err.message : err}`);
+  }
   return { shopifyOrderId: mapped.shopifyOrderId, deliveryStatus: 'cancelled' };
 }
 

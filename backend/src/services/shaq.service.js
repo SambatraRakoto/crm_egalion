@@ -393,6 +393,28 @@ async function shipPendingOrders({ limit = 200 } = {}) {
   return { attempted: pending.length, shipped, failed };
 }
 
+/**
+ * Best-effort cancel of an order's ShaQ shipment (called when the order is
+ * cancelled in Shopify). If the order has no tracking, it's a no-op. If the ShaQ
+ * cancel endpoint isn't configured or the call fails, the CRM stays cancelled and
+ * a warning is logged so ops can cancel the package manually at ShaQ.
+ */
+// FR : Annule (au mieux) le colis ShaQ d'une commande annulée chez Shopify.
+// EN : Best-effort cancel of an order's ShaQ shipment.
+async function cancelShipment(orderNumber) {
+  const order = await orderRepo.findByOrderNumber(orderNumber);
+  if (!order || !order.shaq_tracking_id) return { cancelled: false, reason: 'no_tracking' };
+  const ref = partnerRefFor(order);
+  try {
+    await shaqClient.cancelPackage(ref);
+    logger.info(`ShaQ: colis ${ref} annulé (commande annulée chez Shopify)`);
+    return { cancelled: true };
+  } catch (err) {
+    logger.warn(`ShaQ: annulation impossible pour ${ref} — ANNULER MANUELLEMENT chez ShaQ (tracking ${order.shaq_tracking_id}): ${err && err.message ? err.message : err}`);
+    return { cancelled: false, reason: err && err.message };
+  }
+}
+
 module.exports = {
   handleWebhook,
   listEvents,
@@ -401,5 +423,6 @@ module.exports = {
   importPackages,
   syncStatuses,
   shipPendingOrders,
+  cancelShipment,
   extractDeliveredAt,
 };

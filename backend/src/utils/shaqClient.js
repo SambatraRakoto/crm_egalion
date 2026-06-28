@@ -102,6 +102,20 @@ const shaqClient = {
   /** Track by tracking number (status + history). */
   track: (trackingNumber) => request(`/tracking/${encodeURIComponent(trackingNumber)}`),
   /**
+   * Cancel a package by partner_ref. The cancel endpoint is not part of the
+   * default ShaQ client, so it must be provided via SHAQ_CANCEL_PATH (':ref' =
+   * partner_ref placeholder). Throws when not configured.
+   */
+  cancelPackage: (ref) => {
+    if (!config.shaq.cancelPath) {
+      throw new Error('SHAQ_CANCEL_PATH non configuré (annulation ShaQ programmatique indisponible)');
+    }
+    const path = config.shaq.cancelPath.includes(':ref')
+      ? config.shaq.cancelPath.replace(':ref', encodeURIComponent(ref))
+      : config.shaq.cancelPath;
+    return request(path, { method: 'POST', body: { partner_ref: ref } });
+  },
+  /**
    * Find an existing package by partner_ref by scanning the (date-desc) list.
    * ShaQ's GET /packages/{ref} 404s and the ?partner_ref filter is ignored, so
    * we page through the list. Returns the package row, or null.
