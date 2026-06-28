@@ -116,7 +116,10 @@ async function upsertByOrderNumber(data) {
        region           = COALESCE(EXCLUDED.region, orders.region),
        city             = COALESCE(EXCLUDED.city, orders.city),
        delivery_address = COALESCE(EXCLUDED.delivery_address, orders.delivery_address),
-       order_amount     = COALESCE(NULLIF(EXCLUDED.order_amount, 0), orders.order_amount),
+       -- order_amount: Shopify is the source of truth. Keep the EXISTING non-zero
+       -- amount (set by the Shopify sync) so a ShaQ import never overwrites it with
+       -- the ShaQ declared value (pre-discount). Only fill from ShaQ when empty.
+       order_amount     = COALESCE(NULLIF(orders.order_amount, 0), NULLIF(EXCLUDED.order_amount, 0), orders.order_amount),
        delivery_cost    = COALESCE(NULLIF(EXCLUDED.delivery_cost, 0), orders.delivery_cost),
        delivery_status  = EXCLUDED.delivery_status,
        shaq_tracking_id = COALESCE(EXCLUDED.shaq_tracking_id, orders.shaq_tracking_id)

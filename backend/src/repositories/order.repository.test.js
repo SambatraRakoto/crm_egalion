@@ -49,3 +49,11 @@ describe('order.repository update() — delivered_at stamping', () => {
     expect(sql).not.toMatch(/delivered_at\s*=/);
   });
 });
+
+describe('order.repository upsertByOrderNumber() — Shopify amount protected (B1)', () => {
+  it('prefers the existing order_amount so a ShaQ import never overwrites Shopify', async () => {
+    await orderRepo.upsertByOrderNumber({ orderNumber: '#NA1', orderAmount: 999 });
+    const [sql] = queryMock.mock.calls[0];
+    expect(sql).toMatch(/order_amount\s*=\s*COALESCE\(NULLIF\(orders\.order_amount, 0\)/);
+  });
+});
