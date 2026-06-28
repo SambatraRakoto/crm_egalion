@@ -86,6 +86,10 @@ describe('kpis() — AOV & Basket Size: leads vs delivered perimeters', () => {
   it('Basket size (delivered) = delivered units / delivered orders', () => {
     expect(k.basketSizeDelivered).toBe(1.5); // 3 / 2
   });
+  it('ShaQ commission = 5% of DELIVERED revenue (not all leads)', () => {
+    // delivered USD = 100 + 100 = 200 -> 5% = 10 (all-leads would be 15)
+    expect(k.commissionShaq.usd).toBe(10);
+  });
 });
 
 describe('topRegions — deterministic ranking (C.11)', () => {

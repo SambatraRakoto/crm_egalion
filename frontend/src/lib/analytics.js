@@ -35,10 +35,6 @@ export function kpis(orders) {
   const revenueGhs = orders.reduce((s, o) => s + (o.amountGHS ?? 0), 0);
   const revenueUsd = orders.reduce((s, o) => s + o.amountUSD, 0);
   const logisticsUsd = orders.reduce((s, o) => s + o.deliveryCostUSD, 0);
-  // Commission ShaQ = 5% of order amount (dynamic, never read from the dead
-  // shaq_cost column). Total ShaQ fees = delivery fee + commission.
-  const commissionUsd = round2(revenueUsd * 0.05);
-  const shaqFeesUsd = round2(logisticsUsd + commissionUsd);
   const deliveredOrders = orders.filter((o) => DELIVERED.includes(o.status));
   const delivered = deliveredOrders.length;
   const returned = orders.filter((o) => o.category === CATEGORY.RETURNS).length;
@@ -70,6 +66,13 @@ export function kpis(orders) {
   const dRevenueUsd = deliveredOrders.reduce((s, o) => s + o.amountUSD, 0);
   const dUnits = deliveredOrders.reduce((s, o) => s + unitsOf(o), 0);
 
+  // ShaQ commission (5%) is earned only on DELIVERED orders — same basis as the
+  // Finance page (collected). Net margin uses the delivered economics too, so
+  // these KPIs are not overstated by undelivered leads.
+  const dLogisticsUsd = deliveredOrders.reduce((s, o) => s + o.deliveryCostUSD, 0);
+  const commissionUsd = round2(dRevenueUsd * 0.05);
+  const shaqFeesUsd = round2(dLogisticsUsd + commissionUsd);
+
   return {
     totalOrders: count,
     revenue: { usd: round2(revenueUsd), ghs: round2(revenueGhs) },
@@ -93,7 +96,7 @@ export function kpis(orders) {
     deliveryRate: count ? ((delivered / count) * 100).toFixed(1) : '0.0',
     returnRate: count ? ((returned / count) * 100).toFixed(1) : '0.0',
     cancellationRate: count ? ((issues / count) * 100).toFixed(1) : '0.0',
-    netMargin: revenueUsd ? (((revenueUsd - shaqFeesUsd) / revenueUsd) * 100).toFixed(1) : '0.0',
+    netMargin: dRevenueUsd ? (((dRevenueUsd - shaqFeesUsd) / dRevenueUsd) * 100).toFixed(1) : '0.0',
   };
 }
 
