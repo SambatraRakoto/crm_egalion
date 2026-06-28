@@ -8,7 +8,7 @@
  */
 import { config } from '@/config/env';
 import {
-  CATEGORY, DELIVERED_LABELS, IN_TRANSIT_LABELS, UNASSIGNED_LABELS,
+  CATEGORY, DELIVERED_LABELS, IN_TRANSIT_LABELS, COLLECTED_LABELS,
 } from '@/lib/orderStatus';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -25,16 +25,15 @@ const monthLabel = (key) => {
 // EN : Compute the key KPIs (revenue, logistics, margin, rates) for a set of orders.
 export function kpis(orders) {
   const count = orders.length;
-  // Revenue (CA) is summed from the NATIVE GHS amounts (order_amount = Shopify
-  // total_price), so the displayed GHS total matches Shopify exactly. Summing the
-  // per-order USD values (each rounded to 2 decimals) and converting back to GHS
-  // introduced a cumulative rounding drift — that round-trip is avoided here.
-  // USD stays derived from the per-order USD values (USD is a secondary display;
-  // the shop currency is GHS). All placed orders are counted (parity with Shopify
+  // GHS is the SHOP'S BASE CURRENCY (order_amount = Shopify total_price stored in
+  // GHS). Every money KPI is therefore aggregated in NATIVE GHS — the exact value,
+  // identical to Shopify to the cent, with NO exchange-rate involved. The 15.4
+  // USD↔GHS rate is a fixed reference used ONLY to derive a secondary USD display,
+  // applied ONCE on each final GHS total (`toUsd` below) so it never accumulates
+  // per-order rounding drift. All placed orders are counted (parity with Shopify
   // total sales): ShaQ delivery returns/cancellations are NOT Shopify refunds.
+  const toUsd = (g) => round2(g / config.usdToGhs);
   const revenueGhs = orders.reduce((s, o) => s + (o.amountGHS ?? 0), 0);
-  const revenueUsd = orders.reduce((s, o) => s + o.amountUSD, 0);
-  const logisticsUsd = orders.reduce((s, o) => s + o.deliveryCostUSD, 0);
   const deliveredOrders = orders.filter((o) => DELIVERED.includes(o.status));
   const delivered = deliveredOrders.length;
   const returned = orders.filter((o) => o.category === CATEGORY.RETURNS).length;
@@ -63,41 +62,46 @@ export function kpis(orders) {
   // (all orders) figures stay primary — they match Shopify "Total sales" AOV.
   const dCount = deliveredOrders.length;
   const dRevenueGhs = deliveredOrders.reduce((s, o) => s + (o.amountGHS ?? 0), 0);
-  const dRevenueUsd = deliveredOrders.reduce((s, o) => s + o.amountUSD, 0);
   const dUnits = deliveredOrders.reduce((s, o) => s + unitsOf(o), 0);
 
-  // ShaQ commission (5%) is earned only on DELIVERED orders — same basis as the
-  // Finance page (collected). Net margin uses the delivered economics too, so
-  // these KPIs are not overstated by undelivered leads.
-  const dLogisticsUsd = deliveredOrders.reduce((s, o) => s + o.deliveryCostUSD, 0);
-  const commissionUsd = round2(dRevenueUsd * 0.05);
-  const shaqFeesUsd = round2(dLogisticsUsd + commissionUsd);
+  // ShaQ economics on DELIVERED orders only (no delivery fee is incurred on
+  // undelivered leads), so the logistics KPI, the handling fee and the net margin
+  // all share one perimeter. Everything is computed in NATIVE GHS (exact).
+  const dLogisticsGhs = deliveredOrders.reduce((s, o) => s + (o.deliveryCostGHS ?? 0), 0);
+  // Handling fee (commission ShaQ) = 5% of (revenue − delivery fee), NOT 5% of the
+  // full revenue: the delivery fee is removed FIRST, then 5% on the remainder.
+  const handlingBaseGhs = Math.max(0, dRevenueGhs - dLogisticsGhs);
+  const commissionGhs = round2(handlingBaseGhs * 0.05);
+  // Total ShaQ take = delivery fee + handling fee. Net margin = revenue − that total.
+  const shaqFeesGhs = round2(dLogisticsGhs + commissionGhs);
 
   return {
     totalOrders: count,
-    revenue: { usd: round2(revenueUsd), ghs: round2(revenueGhs) },
-    totalLogistics: { usd: round2(logisticsUsd), ghs: ghs(logisticsUsd) },
-    commissionShaq: { usd: commissionUsd, ghs: ghs(commissionUsd) },
-    totalShaq: { usd: shaqFeesUsd, ghs: ghs(shaqFeesUsd) },
-    // Avg. order value (panier moyen): GHS from the NATIVE GHS revenue ÷ count
-    // (= Revenue GHS ÷ orders, parity with Shopify AOV), not the USD round-trip.
+    revenue: { ghs: round2(revenueGhs), usd: toUsd(revenueGhs) },
+    // Logistics cost on DELIVERED orders only (coherent with commission & margin).
+    totalLogistics: { ghs: round2(dLogisticsGhs), usd: toUsd(dLogisticsGhs) },
+    commissionShaq: { ghs: commissionGhs, usd: toUsd(commissionGhs) },
+    totalShaq: { ghs: shaqFeesGhs, usd: toUsd(shaqFeesGhs) },
+    // Avg. order value (panier moyen): native GHS revenue ÷ count (= Revenue GHS ÷
+    // orders, parity with Shopify AOV); USD derived once from that exact GHS.
     avgOrderValue: count
-      ? { usd: round2(revenueUsd / count), ghs: round2(revenueGhs / count) }
+      ? { ghs: round2(revenueGhs / count), usd: toUsd(revenueGhs / count) }
       : { usd: 0, ghs: 0 },
     avgDeliveryTime: avgDeliveryDays,
     basketSize: count ? round2(totalUnits / count) : 0,
     // Delivered-only perimeter (explicit population). Leads figures above stay
     // primary (Shopify parity); these describe real fulfilled orders.
     deliveredOrders: dCount,
-    deliveredRevenue: { usd: round2(dRevenueUsd), ghs: round2(dRevenueGhs) },
+    deliveredRevenue: { ghs: round2(dRevenueGhs), usd: toUsd(dRevenueGhs) },
     avgOrderValueDelivered: dCount
-      ? { usd: round2(dRevenueUsd / dCount), ghs: round2(dRevenueGhs / dCount) }
+      ? { ghs: round2(dRevenueGhs / dCount), usd: toUsd(dRevenueGhs / dCount) }
       : { usd: 0, ghs: 0 },
     basketSizeDelivered: dCount ? round2(dUnits / dCount) : 0,
     deliveryRate: count ? ((delivered / count) * 100).toFixed(1) : '0.0',
     returnRate: count ? ((returned / count) * 100).toFixed(1) : '0.0',
     cancellationRate: count ? ((issues / count) * 100).toFixed(1) : '0.0',
-    netMargin: dRevenueUsd ? (((dRevenueUsd - shaqFeesUsd) / dRevenueUsd) * 100).toFixed(1) : '0.0',
+    // Net margin % is a ratio (rate-independent) — computed on exact native GHS.
+    netMargin: dRevenueGhs ? (((dRevenueGhs - shaqFeesGhs) / dRevenueGhs) * 100).toFixed(1) : '0.0',
   };
 }
 
@@ -168,6 +172,24 @@ export function bestSellingProducts(orders, limit = 8) {
   return Object.entries(map).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit);
 }
 
+// FR : Commandes LIVRÉES par produit (top N) — ne compte que les commandes dont
+// le statut est « Delivered ». Même forme de sortie que bestSellingProducts
+// ([nom, nb]) pour réutiliser le même graphique. Tri par nb livrées puis nom.
+// EN : DELIVERED orders per product (top N) — counts only orders whose status is
+// "Delivered". Same output shape as bestSellingProducts ([name, count]) so the
+// chart is reused as-is. Sorted by delivered count then name (deterministic).
+export function deliveredByProduct(orders, limit = 8) {
+  const map = {};
+  orders.forEach((o) => {
+    if (!DELIVERED.includes(o.status)) return;
+    const names = Array.isArray(o.items) && o.items.length
+      ? [...new Set(o.items.map((it) => it.name).filter(Boolean))]
+      : (o.product ? [o.product] : []);
+    names.forEach((n) => { map[n] = (map[n] || 0) + 1; });
+  });
+  return Object.entries(map).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit);
+}
+
 // FR : Taux de livraison (%) par produit — part des commandes contenant le
 // produit qui sont livrées. Trié par volume (produits les plus présents).
 // EN : Delivery rate (%) per product — share of orders containing the product
@@ -219,37 +241,60 @@ export function regionRevenue(orders, limit = 10) {
   const map = {};
   orders.forEach((o) => {
     const r = (o.region && String(o.region).trim()) || 'Inconnu';
-    if (!map[r]) map[r] = { orders: 0, revenueUSD: 0 };
+    if (!map[r]) map[r] = { orders: 0, revenueUSD: 0, revenueGHS: 0 };
     map[r].orders++;
     map[r].revenueUSD += o.amountUSD;
+    // Native GHS (Shopify base currency) — summed directly to avoid the
+    // USD→GHS round-trip drift, so per-region revenue matches Shopify.
+    map[r].revenueGHS += (o.amountGHS ?? 0);
   });
   return Object.entries(map)
-    .map(([region, v]) => ({ region, orders: v.orders, revenueUSD: round2(v.revenueUSD) }))
-    .sort((a, b) => b.revenueUSD - a.revenueUSD || a.region.localeCompare(b.region))
+    .map(([region, v]) => ({
+      region, orders: v.orders, revenueUSD: round2(v.revenueUSD), revenueGHS: round2(v.revenueGHS),
+    }))
+    .sort((a, b) => b.revenueGHS - a.revenueGHS || a.region.localeCompare(b.region))
     .slice(0, limit);
 }
 
-// FR : Répartition des commandes par catégorie de statut (avec %). EN : Order distribution by status category (with %).
+// FR : Répartition des commandes par catégorie de statut (avec %), ordonnée selon
+// le flux métier canonique (Pending → Transit → Outcomes → Issues → Returns) pour
+// une lecture stable, indépendamment de l'ordre d'apparition dans les données.
+// EN : Order distribution by status category (with %), sorted by the canonical
+// business flow (Pending → Transit → Outcomes → Issues → Returns) for a stable,
+// data-order-independent reading.
+const CATEGORY_ORDER = Object.values(CATEGORY);
 export function statusDistribution(orders) {
   const map = bucketCount(orders, (o) => o.category);
   const total = orders.length || 1;
-  return Object.entries(map).map(([label, count]) => ({
-    label,
-    count,
-    pct: ((count / total) * 100).toFixed(1),
-  }));
+  const rank = (label) => {
+    const i = CATEGORY_ORDER.indexOf(label);
+    return i === -1 ? CATEGORY_ORDER.length : i;
+  };
+  return Object.entries(map)
+    .map(([label, count]) => ({
+      label,
+      count,
+      pct: ((count / total) * 100).toFixed(1),
+    }))
+    .sort((a, b) => rank(a.label) - rank(b.label) || a.label.localeCompare(b.label));
 }
 
-// FR : Entonnoir de livraison (reçu → collecté → transit → livré → retourné). EN : Delivery funnel (received → collected → transit → delivered → returned).
+// FR : Entonnoir de livraison MONOTONE (chaque étape est un sur-ensemble de la
+// suivante) : Reçu ⊇ Collecté ⊇ En transit ⊇ Livré. « Retourné » est un résultat
+// négatif distinct, affiché à part. Les bornes utilisent les groupes de statuts
+// métiers (orderStatus) pour rester cohérentes avec le filtre de statut.
+// EN : MONOTONIC delivery funnel (each step is a superset of the next):
+// Received ⊇ Collected ⊇ In Transit ⊇ Delivered. "Returned" is a distinct
+// negative outcome, shown separately. Bounds use the business status groups.
 export function deliveryFunnel(orders) {
   const received = orders.length;
-  const assigned = orders.filter((o) => !UNASSIGNED_LABELS.includes(o.status)).length;
+  const collected = orders.filter((o) => COLLECTED_LABELS.includes(o.status)).length;
   const inTransit = orders.filter((o) => IN_TRANSIT_LABELS.includes(o.status)).length;
   const delivered = orders.filter((o) => DELIVERED.includes(o.status)).length;
   const returned = orders.filter((o) => o.category === CATEGORY.RETURNS).length;
   return [
     { label: 'Orders Received', value: received, color: 'bg-indigo-500' },
-    { label: 'Orders Assigned', value: assigned, color: 'bg-blue-500' },
+    { label: 'Collected', value: collected, color: 'bg-blue-500' },
     { label: 'In Transit', value: inTransit, color: 'bg-violet-500' },
     { label: 'Delivered', value: delivered, color: 'bg-emerald-500' },
     { label: 'Returned', value: returned, color: 'bg-rose-500' },
@@ -278,74 +323,79 @@ export function cancellationByRegion(orders, limit = 10) {
 // ─── Finance ────────────────────────────────────────────────────────────────
 // FR : Tableau financier mensuel (CA, encaissé, restant, logistique). EN : Monthly financial table (revenue, collected, outstanding, logistics).
 export function financialByMonth(orders) {
+  // Aggregated in NATIVE GHS (exact); USD derived once per cell from the GHS total.
+  const toUsd = (g) => round2(g / config.usdToGhs);
   const rev = {};
   const ord = {};
   const log = {};
   orders.forEach((o) => {
     const k = o.date.slice(0, 7);
-    rev[k] = (rev[k] || 0) + o.amountUSD;
+    rev[k] = (rev[k] || 0) + (o.amountGHS ?? 0);
     ord[k] = (ord[k] || 0) + 1;
-    log[k] = (log[k] || 0) + o.deliveryCostUSD;
+    log[k] = (log[k] || 0) + (o.deliveryCostGHS ?? 0);
   });
   return Object.keys(rev)
     .sort()
     .map((k) => {
-      const revUsd = rev[k];
-      const collected = orders
+      const revGhs = rev[k];
+      const collectedGhs = orders
         .filter((o) => o.date.slice(0, 7) === k && DELIVERED.includes(o.status))
-        .reduce((s, o) => s + o.amountUSD, 0);
-      const outstanding = Math.max(0, revUsd - collected);
+        .reduce((s, o) => s + (o.amountGHS ?? 0), 0);
+      const outstandingGhs = Math.max(0, revGhs - collectedGhs);
       return {
         month: monthLabel(k),
-        revenueUSD: round2(revUsd),
-        revenueGHS: ghs(revUsd),
-        collectedUSD: round2(collected),
-        collectedGHS: ghs(collected),
-        outstandingUSD: round2(outstanding),
-        outstandingGHS: ghs(outstanding),
-        logisticsUSD: round2(log[k]),
-        logisticsGHS: ghs(log[k]),
+        revenueUSD: toUsd(revGhs),
+        revenueGHS: round2(revGhs),
+        collectedUSD: toUsd(collectedGhs),
+        collectedGHS: round2(collectedGhs),
+        outstandingUSD: toUsd(outstandingGhs),
+        outstandingGHS: round2(outstandingGhs),
+        logisticsUSD: toUsd(log[k]),
+        logisticsGHS: round2(log[k]),
         orders: ord[k],
-        avgUSD: round2(revUsd / ord[k]),
-        avgGHS: ghs(revUsd / ord[k]),
+        avgUSD: toUsd(revGhs / ord[k]),
+        avgGHS: round2(revGhs / ord[k]),
       };
     });
 }
 
 // FR : Synthèse financière (encaissé, restant, COD, commission, marge nette). EN : Financial summary (collected, outstanding, COD, commission, net margin).
 export function financeSummary(orders) {
-  const revenueUsd = orders.reduce((s, o) => s + o.amountUSD, 0);
-  const collectedUsd = orders
-    .filter((o) => DELIVERED.includes(o.status))
-    .reduce((s, o) => s + o.amountUSD, 0);
-  const outstandingUsd = Math.max(0, revenueUsd - collectedUsd);
+  // Aggregated in NATIVE GHS (the shop's base currency = exact, Shopify parity).
+  // USD is derived once per total via `toUsd` (the 15.4 reference rate is never
+  // round-tripped per order, so no rounding drift accumulates).
+  const toUsd = (g) => round2(g / config.usdToGhs);
   const deliveredOrders = orders.filter((o) => DELIVERED.includes(o.status));
-  const codUsd = deliveredOrders
+  const revenueGhs = orders.reduce((s, o) => s + (o.amountGHS ?? 0), 0);
+  const collectedGhs = deliveredOrders.reduce((s, o) => s + (o.amountGHS ?? 0), 0);
+  const outstandingGhs = Math.max(0, revenueGhs - collectedGhs);
+  const codGhs = deliveredOrders
     .slice(0, Math.floor(deliveredOrders.length * 0.7))
-    .reduce((s, o) => s + o.amountUSD, 0);
+    .reduce((s, o) => s + (o.amountGHS ?? 0), 0);
   const count = orders.length || 1;
 
   // ShaQ economics on delivered orders (commission & delivery fee kept separate).
-  // frais_livraison = stored delivery cost; commission_shaq = 5% × price.
+  // frais_livraison = stored delivery cost; handling fee = 5% × (revenue − delivery
+  // fee), i.e. the delivery fee is removed first, then 5% on the remainder.
   // Supplier cost isn't on the order payload here (mock), so we use a 40% COGS
   // proxy; in real mode finance.service overrides these with backend values.
-  const fraisLivraisonUsd = deliveredOrders.reduce((s, o) => s + (o.deliveryCostUSD || 0), 0);
-  const commissionUsd = collectedUsd * 0.05;
-  const supplierUsd = deliveredOrders.reduce((s, o) => s + o.amountUSD * 0.4, 0);
-  const margeNetteUsd = collectedUsd - fraisLivraisonUsd - commissionUsd - supplierUsd;
+  const fraisLivraisonGhs = deliveredOrders.reduce((s, o) => s + (o.deliveryCostGHS ?? 0), 0);
+  const commissionGhs = Math.max(0, collectedGhs - fraisLivraisonGhs) * 0.05;
+  const supplierGhs = deliveredOrders.reduce((s, o) => s + (o.amountGHS ?? 0) * 0.4, 0);
+  const margeNetteGhs = collectedGhs - fraisLivraisonGhs - commissionGhs - supplierGhs;
 
   return {
     deliveredOrders: deliveredOrders.length,
-    totalRevenue: { usd: round2(revenueUsd), ghs: ghs(revenueUsd) },
-    avgOrderValue: { usd: round2(revenueUsd / count), ghs: ghs(revenueUsd / count) },
-    collected: { usd: round2(collectedUsd), ghs: ghs(collectedUsd) },
-    outstanding: { usd: round2(outstandingUsd), ghs: ghs(outstandingUsd) },
-    cod: { usd: round2(codUsd), ghs: ghs(codUsd) },
-    fraisLivraison: { usd: round2(fraisLivraisonUsd), ghs: ghs(fraisLivraisonUsd) },
-    commissionShaq: { usd: round2(commissionUsd), ghs: ghs(commissionUsd) },
-    coutFournisseur: { usd: round2(supplierUsd), ghs: ghs(supplierUsd) },
-    margeNette: { usd: round2(margeNetteUsd), ghs: ghs(margeNetteUsd) },
-    margeNettePct: collectedUsd > 0 ? round2((margeNetteUsd / collectedUsd) * 100) : 0,
+    totalRevenue: { ghs: round2(revenueGhs), usd: toUsd(revenueGhs) },
+    avgOrderValue: { ghs: round2(revenueGhs / count), usd: toUsd(revenueGhs / count) },
+    collected: { ghs: round2(collectedGhs), usd: toUsd(collectedGhs) },
+    outstanding: { ghs: round2(outstandingGhs), usd: toUsd(outstandingGhs) },
+    cod: { ghs: round2(codGhs), usd: toUsd(codGhs) },
+    fraisLivraison: { ghs: round2(fraisLivraisonGhs), usd: toUsd(fraisLivraisonGhs) },
+    commissionShaq: { ghs: round2(commissionGhs), usd: toUsd(commissionGhs) },
+    coutFournisseur: { ghs: round2(supplierGhs), usd: toUsd(supplierGhs) },
+    margeNette: { ghs: round2(margeNetteGhs), usd: toUsd(margeNetteGhs) },
+    margeNettePct: collectedGhs > 0 ? round2((margeNetteGhs / collectedGhs) * 100) : 0,
     returnRate: ((orders.filter((o) => o.category === CATEGORY.RETURNS).length / count) * 100).toFixed(1),
     deliveryRate: ((deliveredOrders.length / count) * 100).toFixed(1),
   };

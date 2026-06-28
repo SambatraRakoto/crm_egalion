@@ -102,6 +102,10 @@ const config = {
     // Catch-up job: periodically ship Pending orders not yet sent (e.g. orders
     // received while ShaQ was down). Minutes between runs (0 disables it).
     retryIntervalMinutes: Number(process.env.SHAQ_RETRY_INTERVAL_MINUTES || 15),
+    // Status-sync job: periodically poll ShaQ for each tracked order's progress
+    // and update the CRM on change. Runs in the background. Minutes between runs
+    // (0 disables it); defaults to 5 min when ShaQ credentials are configured.
+    statusSyncIntervalMinutes: Number(process.env.SHAQ_STATUS_SYNC_MINUTES || 5),
   },
 };
 

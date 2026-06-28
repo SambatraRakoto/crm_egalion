@@ -57,8 +57,8 @@ export function normalizeOrder(row) {
   const firstName = row.first_product ?? items?.[0]?.name ?? '';
   const quantity = Number(row.first_quantity ?? row.total_quantity ?? items?.[0]?.quantity ?? 0);
   const unitPriceGhs = Number(row.first_unit_price ?? items?.[0]?.unitPriceUSD ?? 0);
-  // commission ShaQ = 5% × order amount (dynamic).
-  const commissionGhs = Number((amountGhs * 0.05).toFixed(2));
+  // Handling fee (commission ShaQ) = 5% × (order amount − delivery fee), dynamic.
+  const commissionGhs = Number((Math.max(0, amountGhs - deliveryGhs) * 0.05).toFixed(2));
 
   return {
     id: row.id,
@@ -199,8 +199,8 @@ export const ordersService = {
           amountUSD: ghsToUsd(amountGHS),
           deliveryCostGHS: deliveryGHS,
           deliveryCostUSD: ghsToUsd(deliveryGHS),
-          commissionShaqGHS: Number((amountGHS * 0.05).toFixed(2)),
-          commissionShaqUSD: ghsToUsd(amountGHS * 0.05),
+          commissionShaqGHS: Number((Math.max(0, amountGHS - deliveryGHS) * 0.05).toFixed(2)),
+          commissionShaqUSD: ghsToUsd(Math.max(0, amountGHS - deliveryGHS) * 0.05),
           shaqCostGHS: 0,
           shaqCostUSD: 0,
           quantity: 1,

@@ -5,12 +5,16 @@ const config = require('./config');
 const { pool } = require('./database/pool');
 const logger = require('./utils/logger');
 const shaqRetry = require('./jobs/shaqRetry');
+const shaqStatusSync = require('./jobs/shaqStatusSync');
 const shopifyReconcile = require('./jobs/shopifyReconcile');
 
 const server = app.listen(config.port, () => {
   logger.info(`Nuruya CRM API running on http://localhost:${config.port}${config.apiPrefix} [${config.env}]`);
   // FR : Démarre le rattrapage automatique ShaQ. EN : Start the ShaQ auto catch-up job.
   shaqRetry.start();
+  // FR : Démarre la synchro périodique des statuts ShaQ (toutes les 5 min).
+  // EN : Start the periodic ShaQ status-sync job (every 5 min).
+  shaqStatusSync.start();
   // FR : Démarre le filet de reconciliation Shopify. EN : Start the Shopify reconcile safety net.
   shopifyReconcile.start();
 });
@@ -20,6 +24,7 @@ const server = app.listen(config.port, () => {
 async function shutdown(signal) {
   logger.info(`${signal} received, shutting down...`);
   shaqRetry.stop();
+  shaqStatusSync.stop();
   shopifyReconcile.stop();
   server.close(async () => {
     try {

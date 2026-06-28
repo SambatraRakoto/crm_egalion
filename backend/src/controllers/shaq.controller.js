@@ -15,7 +15,7 @@ const getTariff = asyncHandler(async (req, res) =>
     message: 'Grille tarifaire ShaQ',
     data: {
       grid: tariff.tariffGrid(),
-      commissionRate: tariff.COMMISSION_RATE, // 0.05 (commission_shaq = prix × 0.05)
+      commissionRate: tariff.COMMISSION_RATE, // 0.05 (commission_shaq = (prix − frais livraison) × 0.05)
       returnRate: tariff.RETURN_RATE, // 0.70 (retours = 70% du coût de livraison)
       currency: 'GHS',
     },

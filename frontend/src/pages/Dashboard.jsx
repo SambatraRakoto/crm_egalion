@@ -1,13 +1,12 @@
 import { useState, useMemo } from "react";
-import { Bar, Line, Doughnut } from "react-chartjs-2";
+import { Bar, Doughnut } from "react-chartjs-2";
 import {
-  ShoppingCart, TrendingUp, RotateCcw, Package,
-  DollarSign, Truck, AlertTriangle, Download, X, CheckCircle2,
+  ShoppingCart, TrendingUp, Package,
+  DollarSign, Truck, Download, X, CheckCircle2,
 } from "lucide-react";
 import KpiCard from "../components/crm/KpiCard";
 import { useOrders } from "@/hooks/useOrders";
 import * as analytics from "@/lib/analytics";
-import { config } from "@/config/env";
 import { STATUS_CATEGORIES } from "@/lib/orderStatus";
 import { LoadingState } from "@/components/feedback/LoadingState";
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -68,7 +67,6 @@ const DATE_FILTERS = [
 ];
 
 export default function Dashboard({ currency }) {
-  const [trendView, setTrendView] = useState("month");
   const [period, setPeriod] = useState("all");
   // FR : Filtre par statut de livraison ('all' = tous). EN : Delivery-status filter ('all' = all).
   const [statusFilter, setStatusFilter] = useState("all");
@@ -80,21 +78,16 @@ export default function Dashboard({ currency }) {
   // re-aggregates in memory — no re-fetch, so date filters respond instantly.
   const { data: orders = [], isLoading, isError, error, refetch } = useOrders();
 
+  // EVERY widget below is computed from `scoped` — the same period+status filtered
+  // set — so all KPIs, charts and tables share one date filter and stay coherent.
   const data = useMemo(() => {
     let active = orders.filter((o) => !o.archived);
     if (statusFilter !== "all") active = active.filter((o) => o.status === statusFilter);
-    // Period scopes the "snapshot" metrics (KPIs, funnel, distribution, regions,
-    // products). Time-series charts keep the full history to show the evolution.
     const scoped = analytics.filterByPeriod(active, period, { from: customFrom, to: customTo });
     return {
-      usdToGhs: config.usdToGhs,
       totalOrdersInPeriod: scoped.length,
       kpis: analytics.kpis(scoped),
-      ordersByMonth: analytics.ordersByMonth(active),
-      ordersByWeek: analytics.ordersByWeek(active),
-      ordersByDate: analytics.ordersByDate(active),
-      revenueByMonth: analytics.revenueByMonth(active),
-      bestSellingProducts: analytics.bestSellingProducts(scoped),
+      deliveredByProduct: analytics.deliveredByProduct(scoped),
       deliveryRateByProduct: analytics.deliveryRateByProduct(scoped),
       topRegions: analytics.topRegions(scoped),
       regionRevenue: analytics.regionRevenue(scoped),
@@ -108,10 +101,9 @@ export default function Dashboard({ currency }) {
   if (isError) return <ErrorState error={error} onRetry={refetch} title="Could not load analytics" />;
 
   const {
-    kpis, ordersByMonth: byMonth, ordersByWeek: byWeek, ordersByDate: byDate,
-    revenueByMonth: revByMonth, bestSellingProducts: products, deliveryRateByProduct: delRateProd, topRegions: regions,
-    regionRevenue: regionRevData, statusDistribution: statusDist, deliveryFunnel: funnel,
-    cancellationByRegion: cancByRegion, totalOrdersInPeriod, usdToGhs,
+    kpis, deliveredByProduct: deliveredProd, deliveryRateByProduct: delRateProd,
+    topRegions: regions, regionRevenue: regionRevData, statusDistribution: statusDist,
+    deliveryFunnel: funnel, cancellationByRegion: cancByRegion, totalOrdersInPeriod,
   } = data;
 
   const periodLabel = period === "custom" && customFrom && customTo
@@ -123,26 +115,20 @@ export default function Dashboard({ currency }) {
   const deliveredRev = kpis.deliveredRevenue || { ghs: 0, usd: 0 };
   const totalLogistics = kpis.totalLogistics;
   const commissionShaq = kpis.commissionShaq;
+  // Panier moyen / AOV : la VALEUR LIVRÉE est primaire (logique métier = commandes
+  // réellement livrées) ; le panier "toutes commandes" reste en sous-ligne.
   const avgOrder = kpis.avgOrderValue;
-  // Delivered-only perimeter (shown as a sub-line; leads stays primary = Shopify).
   const avgOrderDelivered = kpis.avgOrderValueDelivered || { ghs: 0, usd: 0 };
   const basketDelivered = kpis.basketSizeDelivered ?? 0;
 
-  const trendData = trendView === "month" ? byMonth : trendView === "week" ? byWeek : byDate;
+  const money = (v) => (currency === "GHS"
+    ? `₵${Number(v.ghs).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+    : `$${Number(v.usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
 
-  const orderTrendChartData = {
-    labels: trendData.labels,
-    datasets: [{ label: "Orders", data: trendData.data, backgroundColor: CHART_COLORS.indigoAlpha, borderColor: CHART_COLORS.indigo, borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: CHART_COLORS.indigo, pointRadius: 3 }],
-  };
-
-  const revChartData = {
-    labels: revByMonth.labels,
-    datasets: [{ label: "Revenue", data: currency === "GHS" ? revByMonth.dataGHS : revByMonth.dataUSD, backgroundColor: CHART_COLORS.emeraldAlpha, borderColor: CHART_COLORS.emerald, borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: CHART_COLORS.emerald, pointRadius: 3 }],
-  };
-
+  // Delivered orders per product (ranking by real fulfilled volume, not all orders).
   const productsChartData = {
-    labels: products.map(([p]) => p.length > 20 ? p.slice(0, 20) + "…" : p),
-    datasets: [{ label: "Orders", data: products.map(([, c]) => c), backgroundColor: [CHART_COLORS.indigo, CHART_COLORS.emerald, CHART_COLORS.amber, CHART_COLORS.rose, CHART_COLORS.violet, CHART_COLORS.sky, "rgba(249,115,22,0.85)", "rgba(20,184,166,0.85)"], borderRadius: 6, borderSkipped: false }],
+    labels: deliveredProd.map(([p]) => (p.length > 20 ? p.slice(0, 20) + "…" : p)),
+    datasets: [{ label: "Delivered orders", data: deliveredProd.map(([, c]) => c), backgroundColor: [CHART_COLORS.emerald, CHART_COLORS.indigo, CHART_COLORS.amber, CHART_COLORS.violet, CHART_COLORS.sky, CHART_COLORS.rose, "rgba(249,115,22,0.85)", "rgba(20,184,166,0.85)"], borderRadius: 6, borderSkipped: false }],
   };
 
   // Delivery rate (%) per product — bars colored by rate (green/amber/rose).
@@ -167,7 +153,7 @@ export default function Dashboard({ currency }) {
       ...hBarOpts.plugins,
       tooltip: {
         ...hBarOpts.plugins.tooltip,
-        callbacks: { label: (ctx) => { const r = delRateProd[ctx.dataIndex]; return ` ${r.rate}% (${r.delivered}/${r.total} livrées)`; } },
+        callbacks: { label: (ctx) => { const r = delRateProd[ctx.dataIndex]; return ` ${r.rate}% (${r.delivered}/${r.total} delivered)`; } },
       },
     },
   };
@@ -197,7 +183,7 @@ export default function Dashboard({ currency }) {
 
   const exportCSV = () => {
     const headers = ["Region", "Orders", "Revenue (USD)", "Revenue (GHS)"];
-    const rows = regionRevData.map((r) => [r.region, r.orders, r.revenueUSD, (r.revenueUSD * usdToGhs).toFixed(2)].join(","));
+    const rows = regionRevData.map((r) => [r.region, r.orders, r.revenueUSD, r.revenueGHS].join(","));
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -210,7 +196,7 @@ export default function Dashboard({ currency }) {
       {/* Title */}
       <div>
         <h2 className="text-lg font-bold text-slate-900">Operational dashboard</h2>
-        <p className="text-sm text-slate-400">Evolving data — orders, deliveries, cancellations, products, regions & performance rates</p>
+        <p className="text-sm text-slate-400">Orders, deliveries, products, regions & performance — coherent with Shopify and delivered orders</p>
       </div>
 
       {/* Period Filter + Status Filter + Export */}
@@ -264,26 +250,31 @@ export default function Dashboard({ currency }) {
         </button>
       </div>
 
-      {/* KPI Grid — 11 cards in one fluid grid (xl: 4/4/3, 2xl: 6/5) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
-        <KpiCard title="Delivery Rate" value={`${Number(kpis.deliveryRate || 0).toFixed(2)}%`} sub="Delivered / total orders" icon={CheckCircle2} accent="emerald" />
-        <KpiCard title="Total Orders" value={totalOrdersInPeriod.toLocaleString()} sub={`${periodLabel}`} icon={ShoppingCart} accent="indigo" trend={0} trendLabel="vs last mo." />
-        <KpiCard title="Revenue" value={currency === "GHS" ? `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub={currency === "GHS" ? `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })} USD` : `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })} GHS`} icon={TrendingUp} accent="emerald" trend={0} trendLabel="vs last mo." />
-        <KpiCard title="Delivered Revenue" value={currency === "GHS" ? `₵${deliveredRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${deliveredRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="Collected on delivered orders" icon={TrendingUp} accent="emerald" />
-        <KpiCard title="Avg. Order Value (all)" value={currency === "GHS" ? `₵${avgOrder.ghs.toLocaleString()}` : `$${avgOrder.usd.toLocaleString()}`} sub={currency === "GHS" ? `Delivered: ₵${avgOrderDelivered.ghs.toLocaleString()}` : `Delivered: $${avgOrderDelivered.usd.toLocaleString()}`} icon={Package} accent="amber" />
-        <KpiCard title="Total Logistics" value={currency === "GHS" ? `₵${totalLogistics.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${totalLogistics.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="Delivery costs" icon={Truck} accent="sky" />
-        <KpiCard title="ShaQ Commission" value={currency === "GHS" ? `₵${commissionShaq.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${commissionShaq.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} sub="5% of delivered value" icon={DollarSign} accent="violet" />
-        <KpiCard title="Avg. Delivery Time" value={`${kpis.avgDeliveryTime}d`} sub="Days to deliver" icon={Truck} accent="sky" />
-        <KpiCard title="Net Margin" value={`${kpis.netMargin}%`} sub="On delivered revenue" icon={TrendingUp} accent="emerald" trend={0} trendLabel="vs last mo." />
-        <KpiCard title="Basket Size (all)" value={`${kpis.basketSize} items`} sub={`Delivered: ${basketDelivered} items`} icon={Package} accent="amber" />
-        <KpiCard title="Cancellation Rate" value={`${kpis.cancellationRate}%`} sub="Issues & exceptions" icon={AlertTriangle} accent="rose" />
-        <KpiCard title="Return Rate" value={`${kpis.returnRate}%`} sub="Orders returned" icon={RotateCcw} accent="rose" trend={0} trendLabel="vs last mo." />
+      {/* ─── KPIs ──────────────────────────────────────────────────────────────
+          Grouped left→right: volume & delivery · revenue · costs & margin.
+          Every value below is scoped to {periodLabel}. */}
+      {/* Volume & delivery */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <KpiCard title="Total Orders" value={totalOrdersInPeriod.toLocaleString()} sub={periodLabel} icon={ShoppingCart} accent="indigo" />
+        <KpiCard title="Delivery Rate" value={`${kpis.deliveryRate}%`} sub="Delivered / total orders" icon={CheckCircle2} accent="emerald" />
+        <KpiCard title="Avg. Delivery Time" value={`${kpis.avgDeliveryTime}d`} sub="Days, ordered → delivered" icon={Truck} accent="sky" />
+        <KpiCard title="Revenue" value={money(totalRev)} sub={`Shopify total · ${currency === "GHS" ? `$${totalRev.usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `₵${totalRev.ghs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}`} icon={TrendingUp} accent="emerald" />
+        <KpiCard title="Delivered Revenue" value={money(deliveredRev)} sub="Collected on delivered orders" icon={TrendingUp} accent="emerald" />
       </div>
 
-      {/* Delivery Funnel */}
+      {/* Revenue economics & basket */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <KpiCard title="Avg. Order Value" value={money(avgOrderDelivered)} sub={`Delivered · all orders: ${money(avgOrder)}`} icon={Package} accent="amber" />
+        <KpiCard title="Basket Size" value={`${basketDelivered} items`} sub={`Delivered · all orders: ${kpis.basketSize} items`} icon={Package} accent="amber" />
+        <KpiCard title="Total Logistics" value={money(totalLogistics)} sub="Delivery cost · delivered" icon={Truck} accent="sky" />
+        <KpiCard title="ShaQ Handling Fee" value={money(commissionShaq)} sub="5% of (revenue − delivery), delivered" icon={DollarSign} accent="violet" />
+        <KpiCard title="Net Margin" value={`${kpis.netMargin}%`} sub="(revenue − delivery) − 5%, delivered" icon={TrendingUp} accent="emerald" />
+      </div>
+
+      {/* ─── Delivery Funnel ───────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
         <h2 className="text-sm font-semibold text-slate-800 mb-1">Delivery Funnel</h2>
-        <p className="text-xs text-slate-400 mb-5">Order flow from received to completed</p>
+        <p className="text-xs text-slate-400 mb-5">Received ⊇ Collected ⊇ In Transit ⊇ Delivered — returned shown separately</p>
         <div className="space-y-3">
           {funnel.map((step) => (
             <div key={step.label} className="flex items-center gap-4">
@@ -291,72 +282,21 @@ export default function Dashboard({ currency }) {
               <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden relative">
                 <div
                   className={`h-full rounded-lg transition-all ${step.color}`}
-                  style={{ width: `${(step.value / funnel[0].value) * 100}%` }}
+                  style={{ width: `${funnel[0].value ? (step.value / funnel[0].value) * 100 : 0}%` }}
                 />
                 <span className="absolute inset-0 flex items-center pl-3 text-xs font-semibold text-white mix-blend-overlay">
                   {step.value.toLocaleString()}
                 </span>
               </div>
               <div className="w-12 text-xs text-slate-500 font-medium flex-shrink-0">
-                {((step.value / funnel[0].value) * 100).toFixed(0)}%
+                {funnel[0].value ? ((step.value / funnel[0].value) * 100).toFixed(0) : 0}%
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Order Trend + Revenue */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800">Order Trends</h2>
-              <p className="text-xs text-slate-400">Volume over time</p>
-            </div>
-            <div className="flex bg-slate-100 rounded-lg p-1 gap-1">
-              {["date", "week", "month"].map((v) => (
-                <button key={v} onClick={() => setTrendView(v)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-all ${trendView === v ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500"}`}>
-                  {v === "date" ? "Daily" : v === "week" ? "Weekly" : "Monthly"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="h-52"><Line data={orderTrendChartData} options={baseOpts} /></div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-          <div className="mb-4">
-            <h2 className="text-sm font-semibold text-slate-800">Revenue Performance</h2>
-            <p className="text-xs text-slate-400">Monthly revenue — {currency}</p>
-          </div>
-          <div className="h-52"><Line data={revChartData} options={baseOpts} /></div>
-        </div>
-      </div>
-
-      {/* Best Selling + Top Regions */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-          <h2 className="text-sm font-semibold text-slate-800 mb-1">Best-Selling Products</h2>
-          <p className="text-xs text-slate-400 mb-4">Top 8 by order volume</p>
-          <div className="h-56"><Bar data={productsChartData} options={hBarOpts} /></div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-          <h2 className="text-sm font-semibold text-slate-800 mb-1">Top Regions by Orders</h2>
-          <p className="text-xs text-slate-400 mb-4">Ghanaian regions</p>
-          <div className="h-56"><Bar data={regionsChartData} options={hBarOpts} /></div>
-        </div>
-      </div>
-
-      {/* Delivery Rate by Product */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-        <h2 className="text-sm font-semibold text-slate-800 mb-1">Delivery Rate by Product</h2>
-        <p className="text-xs text-slate-400 mb-4">% of orders delivered, per product (by volume)</p>
-        <div className="h-64"><Bar data={deliveryRateChartData} options={deliveryRateOpts} /></div>
-      </div>
-
-      {/* Status Donut + Breakdown */}
+      {/* ─── Status overview ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
           <h2 className="text-sm font-semibold text-slate-800 mb-1">Order Status Distribution</h2>
@@ -383,9 +323,30 @@ export default function Dashboard({ currency }) {
         </div>
       </div>
 
-      {/* Region Revenue + Cancellations by Region */}
+      {/* ─── Product performance ───────────────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Revenue by Region */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <h2 className="text-sm font-semibold text-slate-800 mb-1">Delivered Orders by Product</h2>
+          <p className="text-xs text-slate-400 mb-4">Top 8 by delivered orders</p>
+          <div className="h-56"><Bar data={productsChartData} options={hBarOpts} /></div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <h2 className="text-sm font-semibold text-slate-800 mb-1">Delivery Rate by Product</h2>
+          <p className="text-xs text-slate-400 mb-4">% of orders delivered, per product (by volume)</p>
+          <div className="h-64"><Bar data={deliveryRateChartData} options={deliveryRateOpts} /></div>
+        </div>
+      </div>
+
+      {/* ─── Regions ───────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <h2 className="text-sm font-semibold text-slate-800 mb-1">Top Regions by Orders</h2>
+          <p className="text-xs text-slate-400 mb-4">Ghanaian regions</p>
+          <div className="h-56"><Bar data={regionsChartData} options={hBarOpts} /></div>
+        </div>
+
+        {/* Revenue by Region (native GHS — Shopify parity) */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="px-5 pt-5 pb-3">
             <h2 className="text-sm font-semibold text-slate-800">Revenue by Region</h2>
@@ -406,7 +367,7 @@ export default function Dashboard({ currency }) {
                     <td className="px-4 py-2.5 text-slate-700 text-xs font-medium">{r.region}</td>
                     <td className="px-4 py-2.5 text-right text-slate-500 text-xs">{r.orders}</td>
                     <td className="px-4 py-2.5 text-right text-slate-800 text-xs font-semibold">
-                      {currency === "GHS" ? `₵${(r.revenueUSD * usdToGhs).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${r.revenueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                      {currency === "GHS" ? `₵${r.revenueGHS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `$${r.revenueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                     </td>
                   </tr>
                 ))}
@@ -414,35 +375,35 @@ export default function Dashboard({ currency }) {
             </table>
           </div>
         </div>
+      </div>
 
-        {/* Cancellation by Region */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="px-5 pt-5 pb-3">
-            <h2 className="text-sm font-semibold text-slate-800">Cancellation Analysis by Region</h2>
-            <p className="text-xs text-slate-400">Issues & exceptions rate per region</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-y border-slate-100">
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2">Region</th>
-                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2">Rate</th>
-                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2">Issues</th>
+      {/* ─── Cancellation by Region ────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h2 className="text-sm font-semibold text-slate-800">Cancellation Analysis by Region</h2>
+          <p className="text-xs text-slate-400">Issues & exceptions rate per region</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-y border-slate-100">
+                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2">Region</th>
+                <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2">Rate</th>
+                <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2">Issues</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {cancByRegion.map((r, i) => (
+                <tr key={r.region} className={`hover:bg-rose-50/30 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
+                  <td className="px-4 py-2.5 text-slate-700 text-xs font-medium">{r.region}</td>
+                  <td className="px-4 py-2.5 text-right text-xs">
+                    <span className={`font-semibold ${r.rate > 20 ? "text-rose-600" : r.rate > 15 ? "text-amber-600" : "text-emerald-600"}`}>{r.rate}%</span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-slate-500 text-xs">{r.cancelled}/{r.total}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {cancByRegion.map((r, i) => (
-                  <tr key={r.region} className={`hover:bg-rose-50/30 ${i % 2 === 0 ? "bg-white" : "bg-slate-50/40"}`}>
-                    <td className="px-4 py-2.5 text-slate-700 text-xs font-medium">{r.region}</td>
-                    <td className="px-4 py-2.5 text-right text-xs">
-                      <span className={`font-semibold ${r.rate > 20 ? "text-rose-600" : r.rate > 15 ? "text-amber-600" : "text-emerald-600"}`}>{r.rate}%</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-slate-500 text-xs">{r.cancelled}/{r.total}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

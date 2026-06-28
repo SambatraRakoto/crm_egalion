@@ -67,9 +67,11 @@ describe('kpis().avgDeliveryTime — real delivery lead time', () => {
 });
 
 describe('kpis() — AOV & Basket Size: leads vs delivered perimeters', () => {
+  // Money is aggregated in native GHS; delivered orders carry a GHS delivery cost
+  // so the handling fee can be checked on (revenue − delivery).
   const orders = [
-    mkOrder({ status: 'Delivered', amountGHS: 300, items: [{ name: 'A', quantity: 1 }, { name: 'B', quantity: 1 }] }),
-    mkOrder({ status: 'Delivered', amountGHS: 200, items: [{ name: 'A', quantity: 1 }] }),
+    mkOrder({ status: 'Delivered', amountGHS: 300, deliveryCostGHS: 50, items: [{ name: 'A', quantity: 1 }, { name: 'B', quantity: 1 }] }),
+    mkOrder({ status: 'Delivered', amountGHS: 200, deliveryCostGHS: 50, items: [{ name: 'A', quantity: 1 }] }),
     mkOrder({ status: 'Pending', amountGHS: 100, items: [{ name: 'A', quantity: 1 }] }),
   ];
   const k = kpis(orders);
@@ -86,9 +88,10 @@ describe('kpis() — AOV & Basket Size: leads vs delivered perimeters', () => {
   it('Basket size (delivered) = delivered units / delivered orders', () => {
     expect(k.basketSizeDelivered).toBe(1.5); // 3 / 2
   });
-  it('ShaQ commission = 5% of DELIVERED revenue (not all leads)', () => {
-    // delivered USD = 100 + 100 = 200 -> 5% = 10 (all-leads would be 15)
-    expect(k.commissionShaq.usd).toBe(10);
+  it('ShaQ handling fee = 5% of (delivered revenue − delivery fee), native GHS', () => {
+    // delivered GHS = 300 + 200 = 500; delivered delivery fee = 50 + 50 = 100.
+    // base = 500 − 100 = 400 -> 5% = 20 GHS (5% of full revenue would be 25).
+    expect(k.commissionShaq.ghs).toBe(20);
   });
   it('Delivered Revenue = sum of delivered native GHS', () => {
     expect(k.deliveredRevenue.ghs).toBe(500); // 300 + 200
@@ -116,17 +119,18 @@ describe('topRegions — deterministic ranking (C.11)', () => {
 });
 
 describe('regionRevenue — sorted by revenue, not order count (C.12)', () => {
+  // Revenue is summed from native GHS (Shopify base currency); USD stays derived.
   const orders = [
-    { region: 'A', amountUSD: 10 },                                  // 1 order, rev 10
-    { region: 'B', amountUSD: 4 }, { region: 'B', amountUSD: 4 },    // 2 orders, rev 8
-    { region: 'Zeta', amountUSD: 5 }, { region: 'Alpha', amountUSD: 5 }, // tie rev 5
-    { region: '', amountUSD: 3 },                                    // Inconnu
+    { region: 'A', amountUSD: 10, amountGHS: 100 },                                  // 1 order, rev 100
+    { region: 'B', amountUSD: 4, amountGHS: 40 }, { region: 'B', amountUSD: 4, amountGHS: 40 }, // 2 orders, rev 80
+    { region: 'Zeta', amountUSD: 5, amountGHS: 50 }, { region: 'Alpha', amountUSD: 5, amountGHS: 50 }, // tie rev 50
+    { region: '', amountUSD: 3, amountGHS: 30 },                                     // Inconnu
   ];
   const res = regionRevenue(orders);
 
   it('ranks higher-revenue region above a region with more orders', () => {
-    expect(res[0]).toEqual({ region: 'A', orders: 1, revenueUSD: 10 });
-    expect(res[1]).toEqual({ region: 'B', orders: 2, revenueUSD: 8 });
+    expect(res[0]).toEqual({ region: 'A', orders: 1, revenueUSD: 10, revenueGHS: 100 });
+    expect(res[1]).toEqual({ region: 'B', orders: 2, revenueUSD: 8, revenueGHS: 80 });
   });
   it('breaks revenue ties by name (Alpha before Zeta)', () => {
     const names = res.map((r) => r.region);

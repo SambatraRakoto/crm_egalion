@@ -41,7 +41,8 @@ async function summary(from, to) {
       COALESCE(SUM(shaq_cost), 0) AS total_shaq_cost,
       -- ShaQ economics on DELIVERED orders (the example's "CA produits livrés"):
       COALESCE(SUM(delivery_cost) FILTER (WHERE delivery_status = 'delivered'), 0) AS frais_livraison,
-      COALESCE(SUM(order_amount * 0.05) FILTER (WHERE delivery_status = 'delivered'), 0) AS commission_shaq
+      -- Handling fee = 5% of (order_amount − delivery_cost), NOT 5% of order_amount.
+      COALESCE(SUM(GREATEST(order_amount - COALESCE(delivery_cost, 0), 0) * 0.05) FILTER (WHERE delivery_status = 'delivered'), 0) AS commission_shaq
     FROM orders ${whereSql}`;
   const { rows } = await query(sql, params);
   return rows[0];

@@ -222,7 +222,7 @@ export default function Orders({ currency }) {
       quantity: o.quantity ?? (o.items?.[0]?.quantity ?? 1),
       unitUSD: o.unitPriceUSD ?? o.amountUSD,
       unitGHS: o.unitPriceGHS,
-      commissionUSD: o.commissionShaqUSD ?? Number((o.amountUSD * 0.05).toFixed(2)),
+      commissionUSD: o.commissionShaqUSD ?? Number((Math.max(0, o.amountUSD - (o.deliveryCostUSD ?? 0)) * 0.05).toFixed(2)),
       commissionGHS: o.commissionShaqGHS,
       deliveredAt: o.deliveredAt || (isDelivered ? o.updatedAt : null),
     };

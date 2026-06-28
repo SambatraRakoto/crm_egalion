@@ -37,7 +37,11 @@ const REGION_ALIASES = {
 // Default fee when a region is unknown/missing (cheapest southern belt rate).
 const DEFAULT_FEE = 50;
 
-/** COD service fee rate (= "commission ShaQ"), Section 9.1: 5% of collected amount. */
+/**
+ * Handling fee rate (= "commission ShaQ"), Section 9.1: 5%.
+ * IMPORTANT: the 5% is taken on the order amount AFTER removing the delivery fee
+ * (commission = (price − delivery fee) × 5%), NOT on the full order amount.
+ */
 const COMMISSION_RATE = 0.05;
 /** Returns charge (Section 10): 70% of original delivery cost. */
 const RETURN_RATE = 0.70;
@@ -62,16 +66,21 @@ function deliveryFee(region, weightKg = 1) {
   return r.base + extra * r.extraKg;
 }
 
-/** Commission ShaQ (COD fee) = price × 5%. Computed dynamically, never stored. */
-// FR : Commission ShaQ = prix × 5%.
-// EN : ShaQ commission = price × 5%.
-function commission(price) {
-  return Number(((Number(price) || 0) * COMMISSION_RATE).toFixed(2));
+/**
+ * Handling fee (commission ShaQ) = (price − delivery fee) × 5%.
+ * The delivery fee is removed FIRST, then 5% is taken on the remainder.
+ * Computed dynamically, never stored.
+ */
+// FR : Commission ShaQ = (prix − frais de livraison) × 5%.
+// EN : ShaQ handling fee = (price − delivery fee) × 5%.
+function commission(price, deliveryFee = 0) {
+  const base = (Number(price) || 0) - (Number(deliveryFee) || 0);
+  return Number((Math.max(0, base) * COMMISSION_RATE).toFixed(2));
 }
 
 /**
  * Per-order economics (matches the worked example in the spec):
- *   commission_shaq = price × 0.05
+ *   commission_shaq = (price − frais_livraison) × 0.05
  *   marge_nette     = price − frais_livraison − commission_shaq − cout_fournisseur
  * where cout_fournisseur = supplier_unit_cost × quantity (summed over items).
  *
@@ -83,7 +92,7 @@ function orderEconomics({ price = 0, deliveryFee: fee = 0, supplierCost = 0 } = 
   const p = Number(price) || 0;
   const frais = Number(fee) || 0;
   const cout = Number(supplierCost) || 0;
-  const commissionShaq = commission(p);
+  const commissionShaq = commission(p, frais);
   const totalShaqFees = Number((frais + commissionShaq).toFixed(2));
   const margeNette = Number((p - frais - commissionShaq - cout).toFixed(2));
   const margeNettePct = p > 0 ? Number(((margeNette / p) * 100).toFixed(2)) : 0;
