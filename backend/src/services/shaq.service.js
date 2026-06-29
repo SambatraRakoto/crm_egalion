@@ -325,7 +325,7 @@ async function importPackages({ maxPages = 50, limit = 100 } = {}) {
  */
 // FR : Sonde ShaQ et met à jour les statuts changés.
 // EN : Poll ShaQ and update changed statuses.
-async function syncStatuses({ limit = 1000 } = {}) {
+async function syncStatuses({ limit = config.shaq.statusSyncLimit } = {}) {
   if (!shaqClient.configured()) {
     throw ApiError.badRequest('Identifiants ShaQ non configurés');
   }
@@ -359,7 +359,12 @@ async function syncStatuses({ limit = 1000 } = {}) {
       errors.push({ order: o.order_number || o.id, error: err.message });
     }
   }
-  logger.info(`ShaQ sync statuses: ${checked} vérifiée(s), ${changed} mise(s) à jour`);
+  // Surface the error count too: a high "checked / 0 changed" with many errors
+  // means the ShaQ track calls are failing silently (was previously invisible).
+  logger.info(`ShaQ sync statuses: ${checked} vérifiée(s), ${changed} mise(s) à jour, ${errors.length} erreur(s) (limite ${limit})`);
+  if (errors.length) {
+    logger.warn(`ShaQ sync: ${errors.length} erreur(s) — exemples: ${JSON.stringify(errors.slice(0, 3))}`);
+  }
   return { checked, changed, errors };
 }
 

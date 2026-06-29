@@ -106,6 +106,11 @@ const config = {
     // and update the CRM on change. Runs in the background. Minutes between runs
     // (0 disables it); defaults to 5 min when ShaQ credentials are configured.
     statusSyncIntervalMinutes: Number(process.env.SHAQ_STATUS_SYNC_MINUTES || 5),
+    // Max orders polled per sync pass (both the cron and the manual button).
+    // Must comfortably exceed the backlog of non-final tracked orders, otherwise
+    // recent active orders fall outside the window and never sync. Raise via env
+    // if the "vérifiée(s)" count in the logs keeps hitting this ceiling.
+    statusSyncLimit: Number(process.env.SHAQ_STATUS_SYNC_LIMIT || 5000),
   },
 };
 

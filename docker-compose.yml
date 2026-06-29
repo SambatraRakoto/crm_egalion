@@ -69,6 +69,10 @@ services:
       SHAQ_AUTO_SHIP: ${SHAQ_AUTO_SHIP:-true}
       # Catch-up job: minutes between retries for Pending orders (0 disables).
       SHAQ_RETRY_INTERVAL_MINUTES: ${SHAQ_RETRY_INTERVAL_MINUTES:-15}
+      # Status-sync job: minutes between ShaQ status polls (0 disables).
+      SHAQ_STATUS_SYNC_MINUTES: ${SHAQ_STATUS_SYNC_MINUTES:-5}
+      # Max orders polled per status-sync pass (raise above the non-final backlog).
+      SHAQ_STATUS_SYNC_LIMIT: ${SHAQ_STATUS_SYNC_LIMIT:-5000}
     networks:
       - nuruya
 
